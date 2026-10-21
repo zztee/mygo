@@ -195,6 +195,8 @@ func TestMarkdownEscapes(t *testing.T) {
 		{NewText("-"), `\-`},
 		{NewText("    indented"), `&#32;&#32;&#32;&#32;indented`},
 		{NewText("Tom &amp; Jerry & co"), `Tom \&amp; Jerry & co`},
+		{NewText(`C:\Users\ike 桌面\笔记`), `C:\Users\ike 桌面\笔记`},
+		{NewText(`a\*b\ end\`), `a\\\*b\ end\\`},
 		{TextOf(para(ParagraphStyle{}, Run{Text: "x!"}, Run{Text: "y", Attributes: Attributes{Link: "http://e"}})), `x\![y](http://e)`},
 		{TextOf(para(ParagraphStyle{}, Run{Text: "a``b", Attributes: Attributes{Code: true}})), "```a``b```"},
 		{TextOf(para(ParagraphStyle{}, Run{Text: "`x", Attributes: Attributes{Code: true}})), "`` `x ``"},

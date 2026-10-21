@@ -404,7 +404,12 @@ func escapeMarkdown(s string) string {
 	var b strings.Builder
 	for i, r := range s {
 		switch r {
-		case '\\', '*', '_', '`', '[', ']', '<', '~':
+		case '\\':
+			// Markdown reads a backslash literally unless punctuation follows.
+			if i+1 == len(s) || s[i+1] < utf8.RuneSelf && unicode.IsPunct(rune(s[i+1])) || s[i+1] < utf8.RuneSelf && unicode.IsSymbol(rune(s[i+1])) {
+				b.WriteByte('\\')
+			}
+		case '*', '_', '`', '[', ']', '<', '~':
 			b.WriteByte('\\')
 		case '&':
 			// Not the start of an entity, as &amp; or &#38;.
