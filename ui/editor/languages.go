@@ -104,64 +104,6 @@ func languageAlias(name string) string {
 		return "protobuf"
 	case "scss", "less", "sass", "postcss", "pcss":
 		return "css"
-	case "plain", "plaintext", "textfile":
-		return "text"
-	case "tex":
-		return "latex"
-	case "ps1", "psm1", "pwsh":
-		return "powershell"
-	case "octave":
-		return "matlab"
-	case "vb", "vbnet", "vb.net", "vbs", "vbscript":
-		return "visual basic"
-	case "tf", "terraform", "hcl2":
-		return "hcl"
-	case "clj", "cljs", "cljc", "edn":
-		return "clojure"
-	case "cl", "lsp", "commonlisp", "common-lisp":
-		return "lisp"
-	case "scm", "rkt", "scheme":
-		return "scheme"
-	case "erl", "hrl":
-		return "erlang"
-	case "ex", "exs":
-		return "elixir"
-	case "hs", "lhs":
-		return "haskell"
-	case "ml", "mli":
-		return "ocaml"
-	case "fs", "fsx", "fsi", "fsharp":
-		return "f#"
-	case "f90", "f95", "f03", "for":
-		return "fortran"
-	case "pas", "pp", "dpr":
-		return "pascal"
-	case "v", "vh", "sv":
-		return "verilog"
-	case "vhd":
-		return "vhdl"
-	case "jl":
-		return "julia"
-	case "pl", "pm":
-		return "perl"
-	case "gql":
-		return "graphql"
-	case "sol":
-		return "solidity"
-	case "dartlang":
-		return "dart"
-	case "sbt":
-		return "scala"
-	case "gradle":
-		return "groovy"
-	case "coffee":
-		return "coffeescript"
-	case "nasm", "gas", "asm":
-		return "assembly"
-	case "bat", "cmd":
-		return "batch"
-	case "https":
-		return "http"
 	case "vue", "svelte":
 		return "html"
 	}
@@ -460,8 +402,7 @@ func makeLanguages() {
 	}
 	// HTML's tokenizer highlights the scripts and styles inside it.
 	html.Tokenizer = &markupLexer{html: true, script: javascript.Tokenizer, style: css.Tokenizer}
-	list := append([]*Language{goLang, javascript, typescript, json, python, rust, c, cpp, java, kotlin, swift, csharp,
-		shell, yaml, toml, sql, ruby, lua, php, css, html, xml, markdown, diffLang, dockerfile, makefile, protobuf, zig},
-		extraLanguages()...)
+	list := []*Language{goLang, javascript, typescript, json, python, rust, c, cpp, java, kotlin, swift, csharp,
+		shell, yaml, toml, sql, ruby, lua, php, css, html, xml, markdown, diffLang, dockerfile, makefile, protobuf, zig}
 	languageList.Store(&list)
 }
