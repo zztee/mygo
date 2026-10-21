@@ -188,9 +188,9 @@ func (v *view) listNumber(p int) int {
 		return n
 	}
 	st := v.para(p).style
-	if st.Start > 1 {
-		v.numbers[p] = st.Start
-		return st.Start
+	if n, ok := st.firstNumber(); ok {
+		v.numbers[p] = n
+		return n
 	}
 	n := 1
 	for q := p - 1; q >= 0; q-- {
@@ -202,7 +202,8 @@ func (v *view) listNumber(p int) int {
 			// A deeper item, or what an item of this level holds.
 			continue
 		}
-		if qs.List == Numbers {
+		// An item of another marker starts another list.
+		if qs.numbered() && qs.marker() == st.marker() {
 			n = v.listNumber(q) + 1
 		}
 		break

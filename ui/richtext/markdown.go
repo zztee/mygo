@@ -26,6 +26,7 @@ func (t Text) Markdown() string {
 	// quoted tells a list in a quotation, whose items' paragraphs are
 	// quoted outside their indent rather than quotations in the item.
 	var numbers []int
+	var markers []byte // the marker of each level's list, 0 for none
 	open := 0
 	quoted := false
 	prevList, prevQuote := false, false
@@ -45,9 +46,20 @@ func (t Text) Markdown() string {
 				lead = strings.Repeat("    ", st.Indent) + quote
 			}
 		}
+		// A list next to one of another marker at its level is a list
+		// of its own. Bullets after bullets, or numbers after numbers,
+		// need a blank line to keep it apart.
+		another := false
+		if m := st.marker(); st.List != NoList && st.Indent < len(markers) && markers[st.Indent] != 0 && markers[st.Indent] != m {
+			numbers = numbers[:min(len(numbers), st.Indent)]
+			another = delimiter(markers[st.Indent]) == delimiter(m)
+		}
 		switch {
 		case i == 0:
 		case st.List != NoList && prevList:
+			if another || st.Loose && paras[i-1].Style.Indent >= st.Indent {
+				b.WriteString("\n" + strings.TrimRight(quote, " "))
+			}
 			b.WriteByte('\n')
 		case st.Quote && prevQuote:
 			// The blank line between paragraphs of one quotation is
@@ -60,12 +72,16 @@ func (t Text) Markdown() string {
 		switch {
 		case st.List != NoList:
 			open, quoted = st.Indent+1, st.Quote
+			markers = append(markers[:min(len(markers), st.Indent)], make([]byte, max(0, st.Indent-len(markers)))...)
+			markers = append(markers, st.marker())
 		case under:
 			open = st.Indent
 			numbers = numbers[:min(len(numbers), st.Indent)]
+			markers = markers[:min(len(markers), st.Indent)]
 		default:
 			open = 0
 			numbers = numbers[:0]
+			markers = markers[:0]
 		}
 		switch {
 		case st.CodeBlock:
@@ -108,26 +124,23 @@ func (t Text) Markdown() string {
 				numbers = append(numbers, 0)
 			}
 			numbers = numbers[:level+1]
-			marker := "- "
-			switch st.List {
-			case Numbers:
-				if st.Start > 1 {
-					numbers[level] = st.Start
-				} else if numbers[level] == 0 {
-					numbers[level] = 1
+			marker := string(st.marker()) + " "
+			if st.numbered() {
+				if n, ok := st.firstNumber(); ok {
+					numbers[level] = n
 				} else {
-					numbers[level]++
+					numbers[level]++ // from 1 for a list's first
 				}
-				marker = strconv.Itoa(numbers[level]) + ". "
-			case Tasks:
+				marker = strconv.Itoa(numbers[level]) + marker
+			} else {
+				numbers[level] = 0
+			}
+			if st.List == Tasks {
 				if st.Checked {
-					marker = "- [x] "
+					marker += "[x] "
 				} else {
-					marker = "- [ ] "
+					marker += "[ ] "
 				}
-				numbers[level] = 0
-			default:
-				numbers[level] = 0
 			}
 			lead = quote + strings.Repeat("    ", level)
 			b.WriteString(lead + marker)
@@ -145,6 +158,9 @@ func (t Text) Markdown() string {
 	}
 	return b.String()
 }
+
+// delimiter reports whether a list's marker follows a number.
+func delimiter(m byte) bool { return m == '.' || m == ')' }
 
 // breakLines writes each LineBreak of s, Markdown of a paragraph's runs,
 // as a hard line break, the next line starting with lead and read as text,

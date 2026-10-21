@@ -205,3 +205,21 @@ func TestListNumberPastBlocksUnderItem(t *testing.T) {
 		t.Fatalf("numbers %v", got)
 	}
 }
+
+// A list counted from 0 shows 0, and a list after one with another
+// delimiter counts again.
+func TestListNumberFromZeroAndPerList(t *testing.T) {
+	doc := NewDocument(ParseMarkdown("0. zero\n1. one\n\n1) uno\n2) dos"))
+	var s Scroll
+	baseTester(doc, EditorOptions{Scroll: &s})
+	v := s.v
+	got := []int{}
+	for p := range v.paras {
+		if v.para(p).style.List == Numbers {
+			got = append(got, v.listNumber(p))
+		}
+	}
+	if fmt.Sprint(got) != "[0 1 1 2]" {
+		t.Fatalf("numbers %v", got)
+	}
+}

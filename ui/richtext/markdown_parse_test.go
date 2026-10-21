@@ -50,10 +50,10 @@ func TestParseMarkdown(t *testing.T) {
 		want Text
 	}{
 		{"- item\n\n  more\n\n      code\n- next", TextOf(
-			para(ParagraphStyle{List: Bullets}, Run{Text: "item"}),
+			para(ParagraphStyle{List: Bullets, Loose: true}, Run{Text: "item"}),
 			para(ParagraphStyle{Indent: 1}, Run{Text: "more"}),
 			para(ParagraphStyle{Indent: 1, CodeBlock: true}, Run{Text: "code"}),
-			para(ParagraphStyle{List: Bullets}, Run{Text: "next"}),
+			para(ParagraphStyle{List: Bullets, Loose: true}, Run{Text: "next"}),
 		)},
 		{"> - [x] done\n>   - nested", TextOf(
 			para(ParagraphStyle{List: Tasks, Checked: true, Quote: true}, Run{Text: "done"}),
@@ -230,5 +230,29 @@ func TestMarkdownKeepsBlockShapes(t *testing.T) {
 	// A break at the end of a paragraph is HTML's, which Markdown keeps.
 	if got := TextOf(Paragraph{Runs: []Run{{Text: "end "}}}).Markdown(); got != "end<br>" {
 		t.Errorf("trailing break: %q", got)
+	}
+}
+
+// A list comes back in the form it was written: its markers, the blank
+// lines between its items, numbered tasks, and a count from 0.
+func TestMarkdownKeepsListForms(t *testing.T) {
+	for _, md := range []string{
+		"1. [ ] first\n2. [x] second",
+		"1) [ ] first\n2) [ ] second",
+		"0. zero\n1. one\n2. two",
+		"- one\n\n- two\n\n- three",
+		"1. one\n\n2. two",
+		"- dash\n- dash\n\n* star\n* star",
+		"1. one\n2. two\n\n1) uno\n2) dos",
+		"1) one\n2) two",
+		"+ plus\n    * inner",
+		"* [x] done",
+		"> - a\n>\n> * b",
+		"> 1. one\n>\n> 2. two",
+		"- a\n1. one",
+	} {
+		if got := ParseMarkdown(md).Markdown(); got != md {
+			t.Errorf("%q came back\n%q", md, got)
+		}
 	}
 }

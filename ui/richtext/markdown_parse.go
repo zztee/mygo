@@ -81,12 +81,17 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 		}
 		firstItem := true
 		for it := range m.d.Children(i) {
-			ist := ParagraphStyle{List: kind, Indent: depth + 1, Quote: st.Quote}
+			ist := ParagraphStyle{List: kind, Indent: depth + 1, Quote: st.Quote, Marker: b.Marker, Loose: !b.Tight}
 			if task := m.d.Block(it).Task; task != parser.NoTask {
 				ist.List, ist.Checked = Tasks, task == parser.Checked
 			}
+			if ist.Marker == '-' && ist.List != Numbers || ist.Marker == '.' && ist.List == Numbers {
+				ist.Marker = 0 // the usual one
+			}
 			if firstItem && b.Ordered && b.Number > 1 {
 				ist.Start = b.Number
+			} else if firstItem && b.Ordered && b.Number == 0 {
+				ist.Start = StartZero
 			}
 			firstItem = false
 			m.item(it, ist, depth+1)

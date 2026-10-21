@@ -147,6 +147,47 @@ const (
 	Tasks
 )
 
+// StartZero is the Start of a list counted from 0.
+const StartZero = -1
+
+// firstNumber returns the number a list's item starts its list at, or
+// false when it continues the item before it.
+func (s ParagraphStyle) firstNumber() (int, bool) {
+	switch {
+	case s.Start == StartZero:
+		return 0, true
+	case s.Start > 1:
+		return s.Start, true
+	}
+	return 0, false
+}
+
+// marker returns the character that marks the item in Markdown: a bullet,
+// or the delimiter after its number.
+func (s ParagraphStyle) marker() byte {
+	switch s.Marker {
+	case '-', '*', '+':
+		if s.List != Numbers {
+			return s.Marker
+		}
+	case '.', ')':
+		if s.List != Bullets {
+			return s.Marker
+		}
+	}
+	if s.List == Numbers {
+		return '.'
+	}
+	return '-'
+}
+
+// numbered reports whether the item is counted: an ordered list's, or a
+// numbered task's.
+func (s ParagraphStyle) numbered() bool {
+	m := s.marker()
+	return s.List == Numbers || s.List == Tasks && (m == '.' || m == ')')
+}
+
 // normalized returns the style with its levels in range, as text pasted
 // or loaded may have any.
 func (s ParagraphStyle) normalized() ParagraphStyle {
@@ -157,6 +198,12 @@ func (s ParagraphStyle) normalized() ParagraphStyle {
 	}
 	if s.List != Tasks {
 		s.Checked = false
+	}
+	if s.List == NoList {
+		s.Start, s.Marker, s.Loose = 0, 0, false
+	}
+	if s.Start < StartZero {
+		s.Start = 0
 	}
 	if !s.CodeBlock {
 		s.Language = ""
@@ -175,9 +222,17 @@ type ParagraphStyle struct {
 	List    ListKind `json:"list,omitempty"`
 	// Checked marks a task done.
 	Checked bool `json:"checked,omitempty"`
-	// Start is the first number of an ordered list, when it is not 1.
-	// Later items leave it 0 and continue from the item before them.
+	// Start is the first number of an ordered list, when it is not 1,
+	// or StartZero for a list counted from 0. Later items leave it 0 and
+	// continue from the item before them.
 	Start int `json:"start,omitempty"`
+	// Marker is how Markdown marks a list's items: '-', '*' or '+' before
+	// a bullet or a task, '.' or ')' after a number. A task with a number
+	// is a numbered checklist. 0 is the usual '-' or '.'. Lists next to
+	// each other with different markers are different lists.
+	Marker byte `json:"marker,omitempty"`
+	// Loose marks the items of a list that blank lines keep apart.
+	Loose bool `json:"loose,omitempty"`
 	// Indent is how many levels the paragraph is indented: the level of a
 	// list's item, from 0.
 	Indent int `json:"indent,omitempty"`
