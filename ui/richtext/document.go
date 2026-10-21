@@ -1,6 +1,7 @@
 package richtext
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -442,6 +443,66 @@ func (d *Document) takeBack(redo bool) {
 		d.setSelection(s.selBefore[0], s.selBefore[1])
 	}
 	*to = append(*to, s)
+}
+
+// Checkpoint returns rewind, which brings the document back to how it is
+// now: its text, its selection and its steps of undo and redo, as if
+// what was done in between had not been. An app shows something for a
+// while this way, as a formula opened as its source where the caret is,
+// and takes it back, the edits made in it with it, when the caret
+// leaves, to make what they came to one step of undo.
+//
+// rewind does so only if all that changed since lies within the runes
+// from start to end of the text now, which were from start to endThen
+// at the checkpoint, and the document still knows what changed; else it
+// changes nothing and reports false. A checkpoint rewinds once.
+func (d *Document) Checkpoint() (rewind func(start, end, endThen int) bool) {
+	d.lock()
+	defer d.mu.Unlock()
+	cp := checkpoint{
+		version: d.version, text: d.text, anchor: d.anchor, caret: d.caret,
+		undo: slices.Clone(d.undo), redo: slices.Clone(d.redo),
+	}
+	return func(start, end, endThen int) bool {
+		d.lock()
+		defer d.mu.Unlock()
+		return d.rewind(&cp, start, end, endThen)
+	}
+}
+
+// checkpoint is a document as Checkpoint found it.
+type checkpoint struct {
+	version       uint64
+	text          Text
+	anchor, caret int
+	undo, redo    []undoStep
+	used          bool
+}
+
+// rewind brings the document back to cp, if what changed since lies
+// within start to end of the text, start to endThen of cp's.
+func (d *Document) rewind(cp *checkpoint, start, end, endThen int) bool {
+	if cp.used {
+		return false
+	}
+	c, ok := d.since(cp.version)
+	if !ok {
+		return false
+	}
+	if c.version != cp.version {
+		// The region the changes touched, in the text then and now, is
+		// within the one given, and what follows it the same in both.
+		if c.start < start || c.newEnd > end || c.oldEnd > endThen || end-c.newEnd != endThen-c.oldEnd {
+			return false
+		}
+		d.text = cp.text
+		d.changed(c.start, c.newEnd, c.oldEnd)
+	}
+	cp.used = true
+	d.undo, d.redo = cp.undo, cp.redo
+	d.coalesce = false
+	d.setSelection(cp.anchor, cp.caret)
+	return true
 }
 
 // BreakUndoCoalescing ends the step typing adds to, as at a save, so that

@@ -76,3 +76,62 @@ func TestDocumentNoOpSteps(t *testing.T) {
 		t.Fatalf("undo steps %d → %d", n, len(d.undo))
 	}
 }
+
+// TestDocumentCheckpoint checks that rewinding to a checkpoint takes back
+// the text, the selection and the history since, as a change the editor
+// follows, only when what changed lies within the region given, and once.
+func TestDocumentCheckpoint(t *testing.T) {
+	doc := NewDocument(NewText("ab\nX\ncd"))
+	tt, _ := richTester(t, doc)
+	tt.Type("!")
+	doc.Undo() // a step to redo, which the rewind keeps
+	doc.SetSelection(3, 3)
+	tt.Frame()
+	before := doc.Text()
+	rewind := doc.Checkpoint()
+
+	doc.Edit(func(e *Edit) {
+		e.Replace(3, 4, NewText("1\n2\n3"))
+		e.Select(5, 5)
+	})
+	tt.Frame()
+	tt.Type("x")
+	if got := doc.Text().String(); got != "ab\n1\nx2\n3\ncd" {
+		t.Fatalf("edited %q", got)
+	}
+	end := 3 + len("1\nx2\n3")
+	for _, r := range [][3]int{{4, end, 4}, {3, end - 1, 4}, {3, end, 3}, {3, end + 1, 4}} {
+		if rewind(r[0], r[1], r[2]) {
+			t.Fatalf("rewound within %v, which misses the change", r)
+		}
+	}
+	if !rewind(3, end, 4) {
+		t.Fatal("did not rewind")
+	}
+	if !doc.Text().Same(before) {
+		t.Fatalf("rewound to %q", doc.Text().String())
+	}
+	if a, c := doc.Selection(); a != 3 || c != 3 {
+		t.Fatalf("selection %d, %d", a, c)
+	}
+	if doc.CanUndo() || !doc.CanRedo() {
+		t.Fatalf("history: can undo %v, can redo %v", doc.CanUndo(), doc.CanRedo())
+	}
+	if rewind(3, end, 4) {
+		t.Fatal("rewound twice")
+	}
+	tt.Frame()
+	tt.Type("y")
+	if got := doc.Text().String(); got != "ab\nyX\ncd" {
+		t.Fatalf("typed after rewinding %q", got)
+	}
+
+	// A change outside the region keeps what changed.
+	doc.Undo()
+	rewind = doc.Checkpoint()
+	doc.Edit(func(e *Edit) { e.ReplaceString(0, 0, "z", Attributes{}) })
+	doc.Edit(func(e *Edit) { e.Replace(4, 5, NewText("1\n2")) })
+	if rewind(4, 7, 5) || doc.Text().String() != "zab\n1\n2\ncd" {
+		t.Fatalf("rewound over a change outside: %q", doc.Text().String())
+	}
+}
