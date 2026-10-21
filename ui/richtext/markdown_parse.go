@@ -196,7 +196,8 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 			add(n.Text, a)
 		case parser.SoftBreak:
 			if !wideBreak(*out, in, k+1) {
-				add(" ", a)
+				x.SoftBreak = true
+				add(" ", x)
 			}
 		case parser.LineBreak:
 			add(string(LineBreak), a)

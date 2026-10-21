@@ -63,6 +63,10 @@ type Attributes struct {
 	// an image, or a drawing of the app's, inside the line. Only that
 	// character takes it.
 	Attachment *Attachment
+	// SoftBreak marks a space that was the end of a line in Markdown, a
+	// soft line break, which Markdown writes back as one. Typing at its
+	// edges does not continue it.
+	SoftBreak bool
 }
 
 // Bold reports whether the run is bold: its weight is 600 or more.
@@ -73,7 +77,7 @@ func (a Attributes) Bold() bool { return a.Weight >= 600 }
 // NSTextView and the expand rules of Peritext and Loro leave them; every
 // other attribute carries on to what is typed after it.
 func (a Attributes) extending() Attributes {
-	a.Link, a.LinkTitle, a.Code, a.Tag, a.Attachment = "", "", false, "", nil
+	a.Link, a.LinkTitle, a.Code, a.Tag, a.Attachment, a.SoftBreak = "", "", false, "", nil, false
 	return a
 }
 

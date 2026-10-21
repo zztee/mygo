@@ -1,6 +1,7 @@
 package richtext
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -124,6 +125,7 @@ func (t Text) Markdown() string {
 			var h strings.Builder
 			writeMarkdownRuns(&h, p.Runs)
 			s := strings.ReplaceAll(h.String(), string(LineBreak), "<br>")
+			s = strings.ReplaceAll(s, string(softMark), " ")
 			if k := len(strings.TrimRight(s, "#")); k < len(s) {
 				s = s[:k] + "\\" + s[k:]
 			}
@@ -170,32 +172,61 @@ func (t Text) Markdown() string {
 	return b.String()
 }
 
+// softMark stands for a soft line break in what writeMarkdownRuns writes,
+// until breakLines writes it as one. It is whitespace, as the line's end
+// it stands for, and typed text has none: the editor reads it as a
+// newline.
+const softMark = '\u2029'
+
+// lineBreaks are the hard and soft line breaks of what writeMarkdownRuns
+// writes.
+const lineBreaks = string(LineBreak) + string(softMark)
+
 // delimiter reports whether a list's marker follows a number.
 func delimiter(m byte) bool { return m == '.' || m == ')' }
 
 // breakLines writes each LineBreak of s, Markdown of a paragraph's runs,
-// as a hard line break, the next line starting with lead and read as text,
-// not as a block. One that ends the paragraph, which Markdown drops, is
-// HTML's.
+// as a hard line break and each softMark as a soft one, the next line
+// starting with lead and read as text, not as a block. A hard break that
+// ends the paragraph, which Markdown drops, is HTML's. A soft one at
+// either end, or that would leave a line blank, is a space.
 func breakLines(s, lead string) string {
-	if !strings.ContainsRune(s, LineBreak) {
+	if !strings.ContainsAny(s, lineBreaks) {
 		return s
 	}
-	var b strings.Builder
+	var b []byte
 	for {
-		line, rest, ok := strings.Cut(s, string(LineBreak))
-		b.WriteString(line)
-		if !ok {
-			return b.String()
+		i := strings.IndexAny(s, lineBreaks)
+		if i < 0 {
+			return string(append(b, s...))
 		}
-		if strings.TrimSpace(rest) == "" && !strings.ContainsRune(rest, LineBreak) {
-			b.WriteString("<br>")
-			return b.String()
+		r, n := utf8.DecodeRuneInString(s[i:])
+		b = append(b, s[:i]...)
+		rest := s[i+n:]
+		if r == softMark {
+			next := rest
+			if k := strings.IndexAny(rest, lineBreaks); k >= 0 {
+				next = rest[:k]
+			}
+			if strings.TrimSpace(next) == "" {
+				if strings.Trim(rest, " \t"+lineBreaks) != "" {
+					b = append(b, ' ')
+				}
+				s = rest
+				continue
+			}
+			// Spaces before it would make a hard break.
+			b = append(bytes.TrimRight(b, " \t"), '\n')
+		} else {
+			if strings.TrimSpace(rest) == "" && !strings.ContainsRune(rest, LineBreak) {
+				return string(append(b, "<br>"...))
+			}
+			b = append(b, "\\\n"...)
 		}
-		b.WriteString("\\\n" + lead)
+		b = append(b, lead...)
 		// Spaces at the start of a line are not its text.
-		at := len(rest) - len(strings.TrimLeft(rest, " \t"))
-		b.WriteString(strings.NewReplacer(" ", "&#32;", "\t", "&#9;").Replace(rest[:at]))
+		at := len(rest) - len(strings.TrimLeft(rest, " \t"+string(softMark)))
+		b = append(b, strings.NewReplacer(" ", "&#32;", "\t", "&#9;", string(softMark), "&#32;").Replace(rest[:at])...)
 		s = escapeBlockStart(rest[at:])
 	}
 }
@@ -392,6 +423,10 @@ func renderRuns(runs []Run, html map[delimKey]bool) (string, []delim) {
 			first = false
 			continue
 		}
+		if r.Attributes.SoftBreak && strings.TrimSpace(r.Text) == "" {
+			pending += string(softMark)
+			continue
+		}
 		core := strings.TrimFunc(r.Text, unicode.IsSpace)
 		if core == "" {
 			pending += r.Text
@@ -407,7 +442,7 @@ func renderRuns(runs []Run, html map[delimKey]bool) (string, []delim) {
 		closeTo(k)
 		if first {
 			// Spaces at the start would make a block of code.
-			lead = strings.NewReplacer(" ", "&#32;", "\t", "&#9;").Replace(pending + lead)
+			lead = strings.NewReplacer(" ", "&#32;", "\t", "&#9;", string(softMark), "&#32;").Replace(pending + lead)
 			pending = ""
 		}
 		b.WriteString(pending + lead)
@@ -459,6 +494,8 @@ func linkNext(runs []Run, i int) bool {
 // them: their text, and the marks of all but whitespace.
 func readsAs(s string, runs []Run) bool {
 	var got []Run
+	// A soft break reads as a space, which a line's end would.
+	s = strings.ReplaceAll(s, string(softMark), " ")
 	for _, p := range ParseMarkdown(s).Paragraphs() {
 		if got != nil {
 			return false
@@ -555,7 +592,11 @@ func escapeBlockStart(s string) string {
 		return "\\" + s
 	case strings.HasPrefix(s, "="):
 		// Only a line of = alone underlines the line before as a heading.
-		if line, _, _ := strings.Cut(s, string(LineBreak)); strings.Trim(line, "= \t") == "" {
+		line := s
+		if k := strings.IndexAny(s, lineBreaks); k >= 0 {
+			line = s[:k]
+		}
+		if strings.Trim(line, "= \t") == "" {
 			return "\\" + s
 		}
 	}
