@@ -590,6 +590,7 @@ func (v *view) paraFont(st ParagraphStyle) ui.Font {
 	case st.CodeBlock:
 		f.Family = v.look.CodeFont
 		f.Size *= v.look.CodeSize
+		f.Features = v.look.CodeFeatures
 	}
 	return f
 }
@@ -710,6 +711,7 @@ func (look *look) span(text string, a Attributes, st ParagraphStyle) ui.Span {
 		Underline: a.Underline, Strikethrough: a.Strikethrough, Background: a.Background}
 	if a.Code {
 		s.Font = look.CodeFont
+		s.Features = look.CodeFeatures
 		if s.Size == 0 {
 			s.Size = look.size * look.CodeSize
 		}

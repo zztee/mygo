@@ -23,6 +23,10 @@ type Theme struct {
 	CodeFont string
 	CodeSize float32
 	Code     ui.Color
+	// CodeFeatures are OpenType features of code, as ui.Font.Features
+	// has them: "calt=0, liga=0" shows -> and == as typed in a font that
+	// joins them. None by default, the font's own.
+	CodeFeatures string
 	// CodeBackground is behind code within text, which it hugs with
 	// rounded corners.
 	CodeBackground ui.Color

@@ -256,6 +256,27 @@ func TestListNumberFromZeroAndPerList(t *testing.T) {
 	}
 }
 
+// The theme's CodeFeatures go to code, in blocks and within text, as a
+// font's ligatures are turned off; other text keeps the font's own.
+func TestCodeFeatures(t *testing.T) {
+	doc := NewDocument(NewText("a -> b"))
+	var s Scroll
+	baseTester(doc, EditorOptions{Scroll: &s, Theme: &Theme{CodeFeatures: "calt=0, liga=0"}})
+	v := s.v
+	if got := v.paraFont(ParagraphStyle{CodeBlock: true}).Features; got != "calt=0, liga=0" {
+		t.Fatalf("a block of code has features %q", got)
+	}
+	if got := v.look.span("->", Attributes{Code: true}, ParagraphStyle{}).Features; got != "calt=0, liga=0" {
+		t.Fatalf("code within text has features %q", got)
+	}
+	if got := v.paraFont(ParagraphStyle{}).Features; got != "" {
+		t.Fatalf("text has features %q", got)
+	}
+	if got := v.look.span("->", Attributes{}, ParagraphStyle{}).Features; got != "" {
+		t.Fatalf("text within a paragraph has features %q", got)
+	}
+}
+
 // Scroll.Dragging tells while the pointer selects, from its press on the
 // text to its release.
 func TestScrollDragging(t *testing.T) {
