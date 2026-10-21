@@ -2,6 +2,7 @@ package richtext
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -118,6 +119,19 @@ func (v *view) paintBlock(p *ui.Painter, i int, st ParagraphStyle, x, top, heigh
 			fill.H += 2 * radius
 		}
 		p.Clip(box, 0, func() { p.Fill(fill, look.CodeBlockBackground, radius) })
+		if first {
+			if lang := fenceLang(v.para(i)); lang != "" {
+				size := look.size * 0.62
+				if size < 11 {
+					size = 11
+				}
+				font := ui.Font{Family: look.CodeFont, Size: size}
+				if lay := ui.ShapeText(lang, font, 0); lay != nil {
+					lw, _ := lay.Size()
+					p.TextLayout(lay, box.X+box.W-lw-look.size*0.45, box.Y+look.size*0.22, look.Muted)
+				}
+			}
+		}
 	}
 	if st.Quote {
 		w := look.QuoteBarWidth
@@ -176,6 +190,10 @@ func (v *view) listNumber(p int) int {
 		return n
 	}
 	st := v.para(p).style
+	if st.Start > 1 {
+		v.numbers[p] = st.Start
+		return st.Start
+	}
 	n := 1
 	for q := p - 1; q >= 0; q-- {
 		qs := v.para(q).style
@@ -272,4 +290,17 @@ func (v *view) paintAttachments(p *ui.Painter, i int, pv *paraView, x, y float32
 			}
 		}
 	}
+}
+
+// fenceLang is the language a code paragraph was given, as "go".
+func fenceLang(para *richPara) string {
+	if para == nil {
+		return ""
+	}
+	for _, r := range para.runs {
+		if name, ok := strings.CutPrefix(r.a.Tag, "lang:"); ok && name != "" {
+			return name
+		}
+	}
+	return ""
 }

@@ -65,7 +65,13 @@ func (t Text) Markdown() string {
 			b.WriteString(quote + strings.Repeat("    ", level))
 			switch st.List {
 			case Numbers:
-				numbers[level]++
+				if st.Start > 1 {
+					numbers[level] = st.Start
+				} else if numbers[level] == 0 {
+					numbers[level] = 1
+				} else {
+					numbers[level]++
+				}
 				b.WriteString(strconv.Itoa(numbers[level]) + ". ")
 			case Tasks:
 				if st.Checked {

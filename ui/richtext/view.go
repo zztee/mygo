@@ -35,6 +35,9 @@ type EditorOptions struct {
 	// link in a popover and sets it with Document.SetLink. Without it,
 	// ⌘K links a selected URL to itself.
 	OnLinkCommand func()
+	// OnPlainPaste runs when a paste has no text. Returning true means
+	// the app took it, as a picture on the clipboard.
+	OnPlainPaste func() bool
 	// TagStyle styles the runs that carry a Tag, as an app shows mentions
 	// or comments.
 	TagStyle func(tag string, s *ui.Span)
@@ -545,6 +548,9 @@ func (v *view) space(p int, st ParagraphStyle) (above, below float32) {
 	case st.CodeBlock:
 		if p == 0 || !v.para(p-1).style.CodeBlock {
 			above = look.size * look.CodeBlockPadding[1]
+			if fenceLang(v.para(p)) != "" {
+				above += look.size * 1.05
+			}
 		}
 		if p+1 >= len(v.paras) || !v.para(p+1).style.CodeBlock {
 			below = look.size * look.CodeBlockPadding[1]

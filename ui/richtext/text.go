@@ -168,6 +168,9 @@ type ParagraphStyle struct {
 	List    ListKind `json:"list,omitempty"`
 	// Checked marks a task done.
 	Checked bool `json:"checked,omitempty"`
+	// Start is the first number of an ordered list, when it is not 1.
+	// Later items leave it 0 and continue from the item before them.
+	Start int `json:"start,omitempty"`
 	// Indent is how many levels the paragraph is indented: the level of a
 	// list's item, from 0.
 	Indent int `json:"indent,omitempty"`

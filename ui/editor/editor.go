@@ -54,6 +54,7 @@ type options struct {
 	onGutterClick func(int)
 	contextMenu   func(m *ui.Menu)
 	onInput       func(ui.InputEvent) bool
+	onEmptyPaste  func() bool
 	noInputMethod bool
 	// The parts' render functions, nil for the editor's own.
 	renderFindBar     func(*ui.Context, ui.Element, *FindBar)

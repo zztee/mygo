@@ -53,12 +53,16 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 		m.inlinePara(st, m.d.Inlines(i), Attributes{})
 	case parser.CodeBlock:
 		st.CodeBlock, st.Heading = true, 0
+		tag := ""
+		if lang := b.Language(); lang != "" {
+			tag = "lang:" + lang
+		}
 		n := m.d.LineCount(i)
 		for k := range n {
 			line, _ := m.d.Line(i, k)
 			p := Paragraph{Style: st}
-			if line != "" {
-				p.Runs = []Run{{Text: line}}
+			if line != "" || tag != "" {
+				p.Runs = []Run{{Text: line, Attributes: Attributes{Tag: tag}}}
 			}
 			m.paras = append(m.paras, p)
 		}
@@ -79,14 +83,20 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 		if b.Ordered {
 			kind = Numbers
 		}
+		firstItem := true
 		for it := range m.d.Children(i) {
 			ist := ParagraphStyle{List: kind, Indent: depth + 1, Quote: st.Quote}
 			if task := m.d.Block(it).Task; task != parser.NoTask {
 				ist.List, ist.Checked = Tasks, task == parser.Checked
 			}
+			if firstItem && b.Ordered && b.Number > 1 {
+				ist.Start = b.Number
+			}
+			firstItem = false
 			m.item(it, ist, depth+1)
 		}
 	case parser.Table:
+		spec := alignSpec(b.Align)
 		for row := range m.d.Children(i) {
 			p := Paragraph{Style: st}
 			var a Attributes
@@ -102,6 +112,9 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 				for _, r := range m.runs(m.d.Inlines(cell), a) {
 					p.Runs = addMDRun(p.Runs, r)
 				}
+			}
+			if spec != "" && m.d.Block(row).Header && len(p.Runs) > 0 {
+				p.Runs[0].Attributes.Tag = "cols:" + spec
 			}
 			m.paras = append(m.paras, p)
 		}
@@ -262,6 +275,32 @@ func (m *mdReader) tag(s string, out *[]Run, a Attributes) {
 	} else {
 		m.html[which]++
 	}
+}
+
+// alignSpec packs a table's column alignment as "lcr-", or "" when every
+// column is plain so a delimiter row of --- still round-trips.
+func alignSpec(al []parser.Align) string {
+	if len(al) == 0 {
+		return ""
+	}
+	any := false
+	b := make([]byte, len(al))
+	for i, a := range al {
+		switch a {
+		case parser.AlignLeft:
+			b[i], any = 'l', true
+		case parser.AlignCenter:
+			b[i], any = 'c', true
+		case parser.AlignRight:
+			b[i], any = 'r', true
+		default:
+			b[i] = '-'
+		}
+	}
+	if !any {
+		return ""
+	}
+	return string(b)
 }
 
 // addMDRun appends r to runs, joined to the last when their attributes

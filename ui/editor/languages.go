@@ -57,31 +57,31 @@ func languageAlias(name string) string {
 	switch name {
 	case "golang":
 		return "go"
-	case "js", "node", "mjs", "cjs":
+	case "js", "node", "mjs", "cjs", "jsx", "ecmascript", "es6", "es":
 		return "javascript"
-	case "ts":
+	case "ts", "tsx":
 		return "typescript"
-	case "py", "python3":
+	case "py", "python3", "py3":
 		return "python"
-	case "sh", "bash", "zsh", "console", "shellscript", "fish":
+	case "sh", "bash", "zsh", "console", "shellscript", "shell-script", "fish":
 		return "shell"
 	case "yml":
 		return "yaml"
-	case "md":
+	case "md", "gfm", "mdown", "mkdown", "mkdn":
 		return "markdown"
 	case "rs":
 		return "rust"
-	case "cpp", "cc", "cxx", "objc", "objective-c", "objectivec":
+	case "cpp", "cc", "cxx", "h++", "objc", "objective-c", "objectivec", "obj-c", "objcpp", "objective-c++", "mm":
 		return "c++"
-	case "cs", "csharp":
+	case "cs", "csharp", "c-sharp":
 		return "c#"
-	case "kt":
+	case "kt", "kts":
 		return "kotlin"
 	case "rb":
 		return "ruby"
 	case "patch", "udiff":
 		return "diff"
-	case "docker":
+	case "docker", "containerfile":
 		return "dockerfile"
 	case "make", "mk":
 		return "makefile"
@@ -89,14 +89,74 @@ func languageAlias(name string) string {
 		return "xml"
 	case "jsonc", "json5":
 		return "json"
-	case "postgres", "postgresql", "mysql", "sqlite", "plsql":
+	case "postgres", "postgresql", "mysql", "sqlite", "sqlite3", "plsql", "pgsql", "plpgsql":
 		return "sql"
-	case "ini", "cfg", "conf":
+	case "ini", "cfg", "conf", "properties":
 		return "toml"
 	case "proto":
 		return "protobuf"
-	case "scss", "less":
+	case "scss", "less", "sass", "postcss", "pcss":
 		return "css"
+	case "plain", "plaintext", "textfile":
+		return "text"
+	case "tex":
+		return "latex"
+	case "ps1", "psm1", "pwsh":
+		return "powershell"
+	case "octave":
+		return "matlab"
+	case "vb", "vbnet", "vb.net", "vbs", "vbscript":
+		return "visual basic"
+	case "tf", "terraform", "hcl2":
+		return "hcl"
+	case "clj", "cljs", "cljc", "edn":
+		return "clojure"
+	case "cl", "lsp", "commonlisp", "common-lisp":
+		return "lisp"
+	case "scm", "rkt", "scheme":
+		return "scheme"
+	case "erl", "hrl":
+		return "erlang"
+	case "ex", "exs":
+		return "elixir"
+	case "hs", "lhs":
+		return "haskell"
+	case "ml", "mli":
+		return "ocaml"
+	case "fs", "fsx", "fsi", "fsharp":
+		return "f#"
+	case "f90", "f95", "f03", "for":
+		return "fortran"
+	case "pas", "pp", "dpr":
+		return "pascal"
+	case "v", "vh", "sv":
+		return "verilog"
+	case "vhd":
+		return "vhdl"
+	case "jl":
+		return "julia"
+	case "pl", "pm":
+		return "perl"
+	case "gql":
+		return "graphql"
+	case "sol":
+		return "solidity"
+	case "dartlang":
+		return "dart"
+	case "sbt":
+		return "scala"
+	case "gradle":
+		return "groovy"
+	case "coffee":
+		return "coffeescript"
+	case "nasm", "gas", "asm":
+		return "assembly"
+	case "bat", "cmd":
+		return "batch"
+	case "https":
+		return "http"
+	case "vue", "svelte":
+		return "html"
 	}
 	return name
 }
@@ -391,6 +451,7 @@ func makeLanguages() {
 	}
 	// HTML's tokenizer highlights the scripts and styles inside it.
 	html.Tokenizer = &markupLexer{html: true, script: javascript.Tokenizer, style: css.Tokenizer}
-	languageList = []*Language{goLang, javascript, typescript, json, python, rust, c, cpp, java, kotlin, swift, csharp,
-		shell, yaml, toml, sql, ruby, lua, php, css, html, xml, markdown, diffLang, dockerfile, makefile, protobuf, zig}
+	languageList = append([]*Language{goLang, javascript, typescript, json, python, rust, c, cpp, java, kotlin, swift, csharp,
+		shell, yaml, toml, sql, ruby, lua, php, css, html, xml, markdown, diffLang, dockerfile, makefile, protobuf, zig},
+		extraLanguages()...)
 }

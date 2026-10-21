@@ -101,6 +101,9 @@ type State struct {
 	// the text is edited, unlike diagnostics and inlays, which move with
 	// it: compute them again when the buffer's Version changes.
 	LineBackgrounds []LineBackground
+	// OnEmptyPaste runs when Paste has no text. Returning true means the
+	// app took it, as a picture on the clipboard.
+	OnEmptyPaste func() bool
 	// OnInput sees each input event before the editor, as keys for a
 	// mode of the app's such as Vim's: returning true takes it, and the
 	// editor leaves it. Text typed at the carets comes as InputText;
@@ -200,7 +203,7 @@ func (st *State) options() options {
 		autoClose: !st.NoAutoClose, folding: !st.NoFolding, activeLine: !st.NoActiveLine, cursorShape: st.CursorShape, fitContent: st.FitContent,
 		placeholder: st.Placeholder, label: st.Label, theme: st.Theme, bindings: st.Bindings, gutterMarks: st.GutterMarks,
 		backgrounds: st.LineBackgrounds, diffBase: st.DiffBase, onCompletion: st.OnCompletion, onHover: st.OnHover, onDefinition: st.OnDefinition,
-		onGutterClick: st.OnGutterClick, contextMenu: st.ContextMenu, onInput: st.OnInput, noInputMethod: st.NoInputMethod, minDigits: 3,
+		onGutterClick: st.OnGutterClick, contextMenu: st.ContextMenu, onInput: st.OnInput, onEmptyPaste: st.OnEmptyPaste, noInputMethod: st.NoInputMethod, minDigits: 3,
 		renderFindBar: st.RenderFindBar, renderGoToLine: st.RenderGoToLine,
 		renderCompletions: st.RenderCompletions, renderHover: st.RenderHover,
 	}

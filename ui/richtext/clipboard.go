@@ -236,6 +236,10 @@ func (v *view) paste(matchStyle bool) {
 		s := v.services.ReadClipboard()
 		if s != "" {
 			v.insert(s)
+			return
+		}
+		if v.opts.OnPlainPaste != nil {
+			v.opts.OnPlainPaste()
 		}
 		return
 	}
