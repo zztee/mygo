@@ -663,3 +663,17 @@ func TestCodeFenceKeepsInfo(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+// A paragraph or a line starting with = is escaped only when a line of =
+// alone would make the line before a heading.
+func TestEqualsStartEscapedOnlyAsUnderline(t *testing.T) {
+	for _, c := range []struct{ md, want string }{
+		{"==mark== x", "==mark== x"},
+		{"a\\\n===\\\nb", "a\\\n\\===\\\nb"},
+		{"a\\\n==b", "a\\\n==b"},
+	} {
+		if got := ParseMarkdown(c.md).Markdown(); got != c.want {
+			t.Errorf("%q came back as %q", c.md, got)
+		}
+	}
+}

@@ -534,8 +534,13 @@ func escapeMarkdown(s string) string {
 // would read as a heading, a list, a quotation or a rule.
 func escapeBlockStart(s string) string {
 	switch {
-	case strings.HasPrefix(s, "#"), strings.HasPrefix(s, ">"), strings.HasPrefix(s, "-"), strings.HasPrefix(s, "+"), strings.HasPrefix(s, "="):
+	case strings.HasPrefix(s, "#"), strings.HasPrefix(s, ">"), strings.HasPrefix(s, "-"), strings.HasPrefix(s, "+"):
 		return "\\" + s
+	case strings.HasPrefix(s, "="):
+		// Only a line of = alone underlines the line before as a heading.
+		if line, _, _ := strings.Cut(s, string(LineBreak)); strings.Trim(line, "= \t") == "" {
+			return "\\" + s
+		}
 	}
 	i := 0
 	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
