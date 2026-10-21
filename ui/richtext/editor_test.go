@@ -463,6 +463,35 @@ func TestRichTextUnderscoreInWord(t *testing.T) {
 	}
 }
 
+// TestCodeFenceKeepsLanguage checks that ```ts and Return keep the
+// language on the block, including the next line.
+func TestCodeFenceKeepsLanguage(t *testing.T) {
+	doc := NewDocument(Text{})
+	tt, _ := richTester(t, doc)
+	typeRunes(tt, "```ts")
+	tt.Key(0, ui.KeyEnter)
+	typeRunes(tt, "import x")
+	tt.Key(0, ui.KeyEnter)
+	typeRunes(tt, "const n = 1")
+	var lines []string
+	for _, p := range doc.Text().Paragraphs() {
+		if !p.Style.CodeBlock {
+			t.Fatalf("not code: %+v", p)
+		}
+		text := ""
+		for _, r := range p.Runs {
+			if r.Text != "" && r.Attributes.Tag != "lang:ts" {
+				t.Fatalf("tag %q on %q", r.Attributes.Tag, r.Text)
+			}
+			text += r.Text
+		}
+		lines = append(lines, text)
+	}
+	if strings.Join(lines, "\n") != "\nimport x\nconst n = 1" && strings.Join(lines, "\n") != "import x\nconst n = 1" {
+		t.Fatalf("%q", lines)
+	}
+}
+
 // TestRichTextCodeBlockSpace checks that a code block's last line gets its
 // space below back when the line after it leaves the block.
 func TestRichTextCodeBlockSpace(t *testing.T) {

@@ -70,7 +70,13 @@ func (a Attributes) Bold() bool { return a.Weight >= 600 }
 // NSTextView and the expand rules of Peritext and Loro leave them; every
 // other attribute carries on to what is typed after it.
 func (a Attributes) extending() Attributes {
+	tag := a.Tag
 	a.Link, a.Code, a.Tag, a.Attachment = "", false, "", nil
+	// A code block's language stays with the newline, so the next line
+	// is still that language. Other tags, as mentions, do not.
+	if strings.HasPrefix(tag, "lang:") {
+		a.Tag = tag
+	}
 	return a
 }
 

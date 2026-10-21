@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/internal/platform"
 	"github.com/egoist/mygo/internal/rope"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // EditorOptions configure an Editor.
@@ -41,6 +42,10 @@ type EditorOptions struct {
 	// TagStyle styles the runs that carry a Tag, as an app shows mentions
 	// or comments.
 	TagStyle func(tag string, s *ui.Span)
+	// Syntax colors a token of a code block whose fence names a language
+	// the editor knows. Without it, the block keeps the colors its text
+	// was given.
+	Syntax func(kind editor.TokenKind) ui.Color
 	// Theme sets how the text looks: colors, code, headings, lists and
 	// quotations. What it leaves zero, and all of it when nil, takes the
 	// window theme's DefaultTheme.
@@ -273,6 +278,10 @@ type view struct {
 	// text of numbersOf.
 	numbers   map[int]int
 	numbersOf Text
+	// lexAt is the document version lex was built for. lex[i] is the
+	// tokenizer state after paragraph i.
+	lexAt uint64
+	lex   []uint64
 }
 
 type editMode uint8
@@ -298,6 +307,7 @@ type paraView struct {
 	style        ParagraphStyle
 	compose      string
 	at           int
+	lexIn        uint64
 	h            float32
 	// space is the space above and below it, in h.
 	space float32
@@ -719,7 +729,11 @@ func (v *view) paraLayout(p int) *paraView {
 	if len(para.runs) > 0 {
 		first = unsafe.SliceData(para.runs)
 	}
-	if pv.layout != nil && pv.id == para.id && pv.runs == first && pv.nruns == len(para.runs) && pv.style == para.style && pv.compose == compose && pv.at == at {
+	lexIn := uint64(0)
+	if para.style.CodeBlock && v.opts.Syntax != nil && p > 0 && sameCode(v.para(p-1), para) {
+		lexIn = v.stateBefore(p)
+	}
+	if pv.layout != nil && pv.id == para.id && pv.runs == first && pv.nruns == len(para.runs) && pv.style == para.style && pv.compose == compose && pv.at == at && pv.lexIn == lexIn {
 		// The space around it follows its neighbours, which may have
 		// changed without it: a code block's last line, the first heading.
 		v.respace(p)
@@ -730,41 +744,46 @@ func (v *view) paraLayout(p int) *paraView {
 	v.look.width = max(v.width-left-right, 1)
 	line := v.lineOf(p)
 	var spans []ui.Span
-	var typing Attributes
-	if compose != "" {
-		v.doc.lock()
-		typing = v.doc.typingAttributes()
-		v.doc.mu.Unlock()
-	}
-	off, done := 0, 0
-	add := func(n int, a Attributes) {
-		end := off
-		for k := 0; k < n && end < len(line); k++ {
-			_, size := utf8.DecodeRuneInString(line[end:])
-			end += size
+	if colored, ok := v.codeLineSpans(p, line, compose, at, para.style); ok {
+		spans = colored
+		compose = ""
+	} else {
+		var typing Attributes
+		if compose != "" {
+			v.doc.lock()
+			typing = v.doc.typingAttributes()
+			v.doc.mu.Unlock()
 		}
-		if end > off {
-			spans = append(spans, v.look.span(line[off:end], a, para.style))
+		off, done := 0, 0
+		add := func(n int, a Attributes) {
+			end := off
+			for k := 0; k < n && end < len(line); k++ {
+				_, size := utf8.DecodeRuneInString(line[end:])
+				end += size
+			}
+			if end > off {
+				spans = append(spans, v.look.span(line[off:end], a, para.style))
+			}
+			off = end
 		}
-		off = end
-	}
-	for _, run := range para.runs {
-		n := min(run.n, para.n-done)
-		if compose != "" && done <= at && at < done+n {
-			add(at-done, run.a)
+		for _, run := range para.runs {
+			n := min(run.n, para.n-done)
+			if compose != "" && done <= at && at < done+n {
+				add(at-done, run.a)
+				spans = append(spans, v.look.span(compose, typing, para.style))
+				add(done+n-at, run.a)
+				compose = ""
+			} else {
+				add(n, run.a)
+			}
+			done += n
+			if done >= para.n {
+				break
+			}
+		}
+		if compose != "" {
 			spans = append(spans, v.look.span(compose, typing, para.style))
-			add(done+n-at, run.a)
-			compose = ""
-		} else {
-			add(n, run.a)
 		}
-		done += n
-		if done >= para.n {
-			break
-		}
-	}
-	if compose != "" {
-		spans = append(spans, v.look.span(compose, typing, para.style))
 	}
 	shape := ui.TextShape{Width: v.look.width, Align: para.style.Align}
 	l := ui.ShapeRichTextWith(spans, v.paraFont(para.style), shape)
@@ -787,8 +806,110 @@ func (v *view) paraLayout(p int) *paraView {
 		v.hs.add(p, float64(h), -1)
 	}
 	*pv = paraView{layout: l, units: units, id: para.id, runs: first, nruns: len(para.runs), style: para.style,
-		compose: composed, at: at, h: h, space: above + below}
+		compose: composed, at: at, lexIn: lexIn, h: h, space: above + below}
 	return pv
+}
+
+// codeLineSpans colors a line of a fenced block from its language. ok is
+// false when the line is left to its own runs.
+func (v *view) codeLineSpans(p int, line, compose string, at int, st ParagraphStyle) ([]ui.Span, bool) {
+	if v.opts.Syntax == nil || !st.CodeBlock {
+		return nil, false
+	}
+	lang := v.fenceLanguage(p)
+	if lang == "" {
+		return nil, false
+	}
+	l := editor.LanguageNamed(lang)
+	if l == nil || l.Tokenizer == nil {
+		return nil, false
+	}
+	shown := line
+	if compose != "" {
+		i := 0
+		for n := 0; n < at && i < len(line); n++ {
+			_, size := utf8.DecodeRuneInString(line[i:])
+			i += size
+		}
+		shown = line[:i] + compose + line[i:]
+	}
+	enter := uint64(0)
+	if p > 0 && sameCode(v.para(p-1), v.para(p)) {
+		enter = v.stateBefore(p)
+	}
+	tokens, _ := l.Tokenizer.Tokenize(shown, enter, nil)
+	tag := "lang:" + lang
+	var spans []ui.Span
+	prev := 0
+	for _, tk := range tokens {
+		if tk.End <= prev || tk.End > len(shown) {
+			continue
+		}
+		spans = append(spans, v.look.span(shown[prev:tk.End], Attributes{Tag: tag, Color: v.opts.Syntax(tk.Kind)}, st))
+		prev = tk.End
+	}
+	if prev < len(shown) {
+		spans = append(spans, v.look.span(shown[prev:], Attributes{Tag: tag}, st))
+	}
+	return spans, true
+}
+
+// stateBefore returns the tokenizer state paragraph p starts in.
+func (v *view) stateBefore(p int) uint64 {
+	if v.lexAt != v.version {
+		v.lex = v.lex[:0]
+		v.lexAt = v.version
+	}
+	for len(v.lex) < p {
+		i := len(v.lex)
+		prev := uint64(0)
+		if i > 0 {
+			prev = v.lex[i-1]
+		}
+		v.lex = append(v.lex, v.codeExit(i, prev))
+	}
+	if p == 0 {
+		return 0
+	}
+	return v.lex[p-1]
+}
+
+// codeExit returns the tokenizer state after paragraph i, which started
+// in prev when the paragraph before it is the same block.
+func (v *view) codeExit(i int, prev uint64) uint64 {
+	para := v.para(i)
+	if para == nil || !para.style.CodeBlock || v.opts.Syntax == nil {
+		return 0
+	}
+	enter := uint64(0)
+	if i > 0 && sameCode(v.para(i-1), para) {
+		enter = prev
+	}
+	l := editor.LanguageNamed(v.fenceLanguage(i))
+	if l == nil || l.Tokenizer == nil {
+		return 0
+	}
+	_, st := l.Tokenizer.Tokenize(v.lineOf(i), enter, nil)
+	return st
+}
+
+// fenceLanguage returns the language of the code block holding paragraph p.
+func (v *view) fenceLanguage(p int) string {
+	para := v.para(p)
+	if para == nil || !para.style.CodeBlock {
+		return ""
+	}
+	for p > 0 && sameCode(v.para(p-1), v.para(p)) {
+		p--
+	}
+	return fenceLang(v.para(p))
+}
+
+func sameCode(a, b *richPara) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return a.style.CodeBlock && b.style.CodeBlock && a.style.Quote == b.style.Quote && a.style.Indent == b.style.Indent
 }
 
 // maxLaid is how many paragraphs keep their layouts out of view.

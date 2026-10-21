@@ -57,6 +57,10 @@ func (v *view) replace(start, end int, s string) {
 	if d.typing != nil {
 		attrs = *d.typing
 	}
+	if lang := codeLangOf(d.text, start); lang != "" {
+		attrs.Tag = "lang:" + lang
+		attrs.Color = ui.Color{}
+	}
 	v.lockedEdit(func(e *Edit) { e.ReplaceString(start, end, s, attrs) })
 	caret := start + utf8.RuneCountInString(s)
 	v.selAnchor, v.caret = caret, caret
@@ -241,12 +245,30 @@ func (v *view) enter() {
 		}
 	}
 	if !v.opts.NoMarkdown && a == z && v.caret == pe && !st.CodeBlock {
-		if line := v.lineOf(p); strings.HasPrefix(line, "```") && !strings.Contains(line[3:], "`") {
+		if lang, ok := codeFenceLang(v.lineOf(p)); ok {
+			tag := ""
+			if lang != "" {
+				tag = "lang:" + lang
+			}
 			v.edit(func(e *Edit) {
-				e.ReplaceString(ps, pe, "", Attributes{})
-				e.FormatParagraphs(ps, ps, func(s *ParagraphStyle) { *s = ParagraphStyle{CodeBlock: true, Indent: s.Indent} })
+				e.ReplaceString(ps, pe, "", Attributes{Tag: tag})
+				e.FormatParagraphs(ps, ps, func(s *ParagraphStyle) {
+					*s = ParagraphStyle{CodeBlock: true, Quote: s.Quote, Indent: s.Indent}
+				})
+				if tag != "" && e.Text().Len() > ps {
+					e.Format(ps, ps+1, func(a *Attributes) {
+						a.Tag = tag
+						a.Color = ui.Color{}
+					})
+				}
 				e.Select(ps, ps)
 			})
+			if tag != "" {
+				v.doc.lock()
+				keep := Attributes{Tag: tag}
+				v.doc.typing = &keep
+				v.doc.mu.Unlock()
+			}
 			return
 		}
 	}
@@ -279,6 +301,50 @@ func (v *view) enter() {
 	d.typing = &keep
 	d.mu.Unlock()
 	v.coalesce = false
+}
+
+// codeFenceLang reports the language after an opening fence of three
+// backticks at the start of line, and whether line is such a fence.
+// ```ts and ```typescript are fences; a backtick in the rest is not,
+// so ```a`b stays text.
+func codeFenceLang(line string) (string, bool) {
+	if !strings.HasPrefix(line, "```") || strings.Contains(line[3:], "`") {
+		return "", false
+	}
+	info := strings.TrimSpace(line[3:])
+	if i := strings.IndexAny(info, " \t"); i >= 0 {
+		info = info[:i]
+	}
+	return info, true
+}
+
+// codeLangOf returns the language of the code block holding rune at.
+func codeLangOf(t Text, at int) string {
+	if t.Len() == 0 {
+		return ""
+	}
+	if at >= t.Len() {
+		at = t.Len() - 1
+	}
+	p := t.paraAt(at)
+	para := seqAt(t.seq(), p)
+	if !para.style.CodeBlock {
+		return ""
+	}
+	for {
+		if lang := fenceLang(para); lang != "" {
+			return lang
+		}
+		if p == 0 {
+			return ""
+		}
+		prev := seqAt(t.seq(), p-1)
+		if !sameCode(prev, para) {
+			return ""
+		}
+		p--
+		para = prev
+	}
 }
 
 // typed runs the Markdown shortcuts after s was typed at the caret.
