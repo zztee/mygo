@@ -753,6 +753,35 @@ func (t *Tester) Announcements() []string {
 	return a
 }
 
+// AccessInfo is how assistive technology sees an element: its role, its
+// value, its states and, for a slider, a progress bar or a meter, its
+// range.
+type AccessInfo struct {
+	Role                               Role
+	Value                              string
+	Checked, Mixed, Expanded, Disabled bool
+	Min, Max, Now                      float64
+}
+
+// Access returns how assistive technology sees the first element of
+// role named s in the last frame, by its label or the text it shows, and
+// false when it sees none. RoleAuto takes an element of any role: a
+// button and its text, or a row and its button, can share a name.
+func (t *Tester) Access(s string, role Role) (AccessInfo, bool) {
+	for _, n := range t.rt.accessTree().Nodes {
+		if n.Label != s || role != RoleAuto && Role(n.Role)+RoleGroup != role {
+			continue
+		}
+		return AccessInfo{
+			Role: Role(n.Role) + RoleGroup, Value: n.Value,
+			Checked: n.States&platform.AccessChecked != 0, Mixed: n.States&platform.AccessMixed != 0,
+			Expanded: n.States&platform.AccessExpanded != 0, Disabled: n.States&platform.AccessDisabled != 0,
+			Min: n.Min, Max: n.Max, Now: n.Now,
+		}, true
+	}
+	return AccessInfo{}, false
+}
+
 // Focused reports whether the element showing text or labeled s, or its
 // container, has the keyboard focus.
 func (t *Tester) Focused(s string) bool {

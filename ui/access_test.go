@@ -7,6 +7,36 @@ import (
 	"github.com/egoist/mygo/internal/platform"
 )
 
+// A Tester tells how assistive technology sees an element by its name:
+// its role, its states and its range.
+func TestTesterAccess(t *testing.T) {
+	on := true
+	tt := coreNewTester(func(c *context) {
+		coreSwitch(c, &on).Label("Wrap")
+		coreButtonBase(c).Label("Plain")
+		coreBox(c).Label("Read").Role(RoleProgress).Range(0, 100, 40)
+		coreButtonBase(c).Label("Theme").Role(RoleRadio).Checked(false)
+	}, 300, 200)
+	if a, ok := tt.Access("Wrap", RoleAuto); !ok || a.Role != RoleSwitch || !a.Checked {
+		t.Fatalf("switch %+v %v", a, ok)
+	}
+	if a, ok := tt.Access("Plain", RoleAuto); !ok || a.Role != RoleButton || a.Checked {
+		t.Fatalf("button %+v %v", a, ok)
+	}
+	if a, ok := tt.Access("Read", RoleProgress); !ok || a.Role != RoleProgress || a.Min != 0 || a.Max != 100 || a.Now != 40 {
+		t.Fatalf("progress %+v %v", a, ok)
+	}
+	if a, ok := tt.Access("Theme", RoleAuto); !ok || a.Role != RoleRadio || a.Checked {
+		t.Fatalf("radio %+v %v", a, ok)
+	}
+	if _, ok := tt.Access("Theme", RoleButton); ok {
+		t.Fatal("found a button named Theme")
+	}
+	if _, ok := tt.Access("Nothing", RoleAuto); ok {
+		t.Fatal("found an element named Nothing")
+	}
+}
+
 // node returns the node of the tree with role and a label containing
 // label.
 func accessNode(t *testing.T, tree *platform.AccessTree, role platform.AccessRole, label string) platform.AccessNode {
