@@ -72,6 +72,24 @@ type EditorOptions struct {
 	// a frame, so that the text's height is exact rather than estimated,
 	// for an app that shows it, as Scroll's Content.
 	Measure bool
+	// OnAttachment runs as the pointer goes down on the box of an
+	// attachment, for an app that makes its own of presses there, as on
+	// a cell of a table it draws. i is the attachment's rune; x and y are
+	// where in it, in its own DIPs, those of Attachment.Width and Height,
+	// however the box shrinks to the column; ev is the press, its Button
+	// telling the secondary from the primary. Returning true takes a
+	// press of the primary button: the editor neither moves the caret nor
+	// selects. The secondary button opens the context menu after it
+	// anyway, with the items of ContextMenu (Scroll.AttachmentBox
+	// returns where the box is).
+	OnAttachment func(i int, x, y float32, ev ui.InputEvent) bool
+	// ContextMenu adds items to the editor's context menu, before its
+	// editing items. attachment is the rune of the attachment the
+	// secondary button opened the menu on, whose press OnAttachment saw
+	// first, or -1. It runs as the menu opens and again in the frame
+	// after an item was chosen, where the item's Chosen reports it, as
+	// the function given to ui.Element.ContextMenu does.
+	ContextMenu func(m *ui.Menu, attachment int)
 }
 
 // Scroll is where an editor is scrolled, for an app showing its own scroll
@@ -273,6 +291,9 @@ type view struct {
 	dragStart [2]int
 	pressMods ui.Modifiers
 	pressLink string
+	// menuAt is one past the rune of the attachment the secondary button
+	// went down on last, opening the context menu there; 0 for none.
+	menuAt int
 	// cursor is the pointer's shape where it hovers: an arrow over task
 	// boxes and the scroll bar, a hand over links, an I-beam over text.
 	cursor     ui.Cursor

@@ -17,6 +17,7 @@ func (v *view) input(ev ui.InputEvent) bool {
 	defer v.publish()
 	switch ev.Kind {
 	case ui.InputKeyDown:
+		v.menuAt = 0 // a menu the keyboard opens is not an attachment's
 		if v.key(ev.Key, ev.Mods) {
 			v.blinkStart = ev.Time
 			return true
@@ -540,7 +541,12 @@ func (v *view) editCommand(name string) bool {
 
 // press handles a press of the pointer.
 func (v *view) press(ev ui.InputEvent) bool {
+	v.menuAt = 0
 	if ev.Button != 0 {
+		// The context menu opens after, with what the app made of it.
+		if ev.Button == 1 && !v.overScrollbar(ev.X) {
+			v.pressAttachment(ev)
+		}
 		return false
 	}
 	v.pressMods = ev.Mods
@@ -561,6 +567,9 @@ func (v *view) press(ev ui.InputEvent) bool {
 	if p, ok := v.taskBox(x, y); ok && ev.Clicks == 1 && !v.opts.ReadOnly {
 		start := v.shown.paraStart(p)
 		v.command(func(d *Document) { d.ToggleChecked(start) })
+		return true
+	}
+	if v.pressAttachment(ev) {
 		return true
 	}
 	i, aff := v.positionAt(x, y)
@@ -711,5 +720,8 @@ func (v *view) dragThumb(y float32) {
 
 // menu builds the editor's context menu.
 func (v *view) menu(m *ui.Menu) {
+	if v.opts.ContextMenu != nil {
+		v.opts.ContextMenu(m, v.menuAt-1)
+	}
 	m.EditItems()
 }
