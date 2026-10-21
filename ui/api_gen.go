@@ -4039,6 +4039,18 @@ func (_handle Element) HeightPercent(p float32) Element {
 	return wrapElement(_node.HeightPercent(p))
 }
 
+// HideScrollbar paints no scroll bar. The container still scrolls, for an
+// app that draws its own, as a rail beside the text.
+func (_handle Element) HideScrollbar() Element {
+	_node := _handle.node()
+	if _node == nil {
+		return Element{}
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return wrapElement(_node.HideScrollbar())
+}
+
 // Highlighted reports whether an option of a select is the one the pointer
 // or the arrows are on.
 func (_handle Element) Highlighted() bool {
