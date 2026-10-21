@@ -12,13 +12,14 @@ import (
 // composition, the caret and the scroll bar.
 func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	v.rect = r
-	w, h := max(r.W-2*v.padX, 1), max(r.H-2*v.padY, 1)
+	w, h := v.column(r.W), max(r.H-2*v.padY, 1)
 	v.layout(w, h)
 	ox, oy := r.X+v.padX, r.Y+v.padY
 	look := &v.look
 	if v.shown.Len() == 0 && v.compose == "" && v.opts.Placeholder != "" {
 		pl := ui.ShapeRichTextWith([]ui.Span{{Text: v.opts.Placeholder}}, v.paraFont(v.para(0).style), ui.TextShape{Width: w})
-		p.TextLayout(pl, ox, oy, look.Muted)
+		_, py := v.origin(0)
+		p.TextLayout(pl, ox, oy+float32(py-v.scroll), look.Muted)
 	}
 	a, z := v.selection()
 	focused := v.focused
@@ -28,7 +29,8 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		top := oy + float32(v.hs.top(i)-v.scroll)
 		px, py := v.origin(i)
 		x, y := ox+px, oy+float32(py-v.scroll)
-		v.paintBlock(p, i, st, ox, top, pv.h, w)
+		ga, gb := v.gaps(i, st)
+		v.paintBlock(p, i, st, ox, top+ga, pv.h-ga-gb, w)
 		ps := v.shown.paraStart(i)
 		pe := ps + v.para(i).n
 		if a != z && a <= pe && z >= ps && (focused || v.opts.ReadOnly) {
@@ -62,10 +64,38 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 			p.Fill(ui.Rect{X: ox + cx, Y: oy + float32(cy-v.scroll), W: max(1/scale, 1), H: ch}, look.Caret, 0)
 		}
 	}
-	if total := v.hs.top(len(v.paras)); total > float64(h) {
+	if total := v.hs.top(len(v.paras)); total > float64(h) && !v.opts.HideScrollbar {
 		top, size := v.thumbBox()
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: r.Y + top, W: 5, H: size}, look.Text.Alpha(0.3), 2.5)
 	}
+	if v.opts.Scroll != nil && v.measure(4*time.Millisecond) {
+		p.AnimationFrame()
+	}
+}
+
+// measure lays out paragraphs not measured yet, out of view, for a while,
+// as an app showing where the text is scrolled wants their heights, and
+// reports whether some are left.
+func (v *view) measure(d time.Duration) bool {
+	if _, unknown := v.hs.totals(); unknown == 0 {
+		return false
+	}
+	start := time.Now()
+	more := false
+	for i := range v.paras {
+		if v.paras[i].h > 0 {
+			continue
+		}
+		if time.Since(start) > d {
+			more = true
+			break
+		}
+		v.paraLayout(i)
+	}
+	v.estimate()
+	// The text in view stays where it is, as those above it grow.
+	v.scroll = max(0, v.hs.top(v.anchor)+v.anchorOff)
+	return more
 }
 
 // paintBlock paints what a paragraph of style st shows behind its text:

@@ -180,6 +180,23 @@ func (v *view) vertical(lines int, extend bool) {
 		v.moveTo(v.shown.Len(), ui.TextDownstream, extend)
 	default:
 		i, a := v.positionAt(v.desiredX, target)
+		if _, ny, _ := v.caretAt(i, 0, a); lines > 0 && ny <= y || lines < 0 && ny >= y {
+			// The target fell in the room between paragraphs, which
+			// takes it back to the line it left: go across it.
+			p := v.shown.paraAt(i)
+			if lines > 0 && p+1 < len(v.paras) {
+				_, oy := v.origin(p + 1)
+				i, a = v.positionAt(v.desiredX, oy+1)
+			} else if lines < 0 && p > 0 {
+				_, oy := v.origin(p - 1)
+				_, lh := v.paraLayout(p - 1).layout.Size()
+				i, a = v.positionAt(v.desiredX, oy+float64(lh)-1)
+			} else if lines > 0 {
+				i, a = v.shown.Len(), ui.TextDownstream
+			} else {
+				i, a = 0, ui.TextDownstream
+			}
+		}
 		v.moveTo(i, a, extend)
 	}
 	v.hasDesired = true
@@ -658,7 +675,7 @@ func (v *view) taskBox(x float32, y float64) (int, bool) {
 
 // overScrollbar reports whether x of the element is on the scroll bar.
 func (v *view) overScrollbar(x float32) bool {
-	return v.hs.top(len(v.paras)) > float64(v.viewH) && x >= v.rect.W-scrollbarWidth
+	return !v.opts.HideScrollbar && v.hs.top(len(v.paras)) > float64(v.viewH) && x >= v.rect.W-scrollbarWidth
 }
 
 // thumbBox returns the top and the height of the scroll bar's thumb, in

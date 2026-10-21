@@ -30,6 +30,7 @@ type options struct {
 	indent        IndentStyle
 	wrap          bool
 	wrapColumn    int
+	maxWidth      float32
 	lineNumbers   LineNumbers
 	whitespace    Whitespace
 	wrapGuides    []int

@@ -42,6 +42,93 @@ type EditorOptions struct {
 	// quotations. What it leaves zero, and all of it when nil, takes the
 	// window theme's DefaultTheme.
 	Theme *Theme
+	// MaxWidth narrows the text to a column at most MaxWidth DIPs wide,
+	// centered in the editor, whose sides still take the pointer and the
+	// wheel; 0 lets the text fill the editor.
+	MaxWidth float32
+	// Margin is room around the text, in DIPs: top, right, bottom and
+	// left, as CSS orders them. The top and bottom scroll with the text;
+	// the sides are the least room beside the column.
+	Margin [4]float32
+	// HideScrollbar paints no scroll bar, for an app that shows its own
+	// through Scroll.
+	HideScrollbar bool
+	// Scroll, when set, tells where the editor is scrolled and scrolls it.
+	Scroll *Scroll
+}
+
+// Scroll is where an editor is scrolled, for an app showing its own scroll
+// bar or progress (EditorOptions.Scroll). The editor binds it as it builds;
+// until then its lengths are 0 and its scrolls do nothing.
+type Scroll struct{ v *view }
+
+// Offset returns how far the text is scrolled down, Viewport how high the
+// part that shows is and Content how high all of it is, in DIPs, as the
+// editor last laid it out: paragraphs not laid out yet count at an
+// estimate.
+func (s *Scroll) Offset() float32 {
+	if s.v == nil {
+		return 0
+	}
+	return float32(s.v.scroll)
+}
+
+func (s *Scroll) Viewport() float32 {
+	if s.v == nil {
+		return 0
+	}
+	return s.v.viewH
+}
+
+func (s *Scroll) Content() float32 {
+	if s.v == nil {
+		return 0
+	}
+	return float32(s.v.hs.top(len(s.v.paras)))
+}
+
+// Column returns the left edge of the column of text in the editor and
+// its width.
+func (s *Scroll) Column() (x, w float32) {
+	if s.v == nil {
+		return 0, 0
+	}
+	return s.v.padX, s.v.width
+}
+
+// TextY returns the top of the text of the paragraph holding rune i, in
+// the content.
+func (s *Scroll) TextY(i int) float32 {
+	v := s.v
+	if v == nil || len(v.paras) == 0 {
+		return 0
+	}
+	p := v.shown.paraAt(max(0, min(i, v.shown.Len())))
+	above, _ := v.space(p, v.para(p).style)
+	return float32(v.hs.top(p) + float64(above))
+}
+
+// ScrollTo scrolls the content to y.
+func (s *Scroll) ScrollTo(y float32) {
+	v := s.v
+	if v == nil {
+		return
+	}
+	v.setScroll(max(0, min(float64(y), v.hs.top(len(v.paras))-float64(v.viewH))))
+}
+
+// ScrollToText scrolls the text of the paragraph holding rune i to margin
+// DIPs below the top.
+func (s *Scroll) ScrollToText(i int, margin float32) {
+	v := s.v
+	if v == nil || len(v.paras) == 0 {
+		return
+	}
+	p := v.shown.paraAt(max(0, min(i, v.shown.Len())))
+	above, _ := v.space(p, v.para(p).style)
+	v.anchor, v.anchorOff = p, float64(above-margin)
+	v.scroll = v.hs.top(p) + v.anchorOff
+	v.reveal = false
 }
 
 // Editor creates an editor of doc's attributed text, as NSTextView edits
@@ -107,6 +194,8 @@ type view struct {
 	anchorOff   float64
 	reveal      bool
 	first, last int
+	// pad is the theme's room across, which padX adds the column's to.
+	pad float32
 	// The selection, in runes: anchor and caret, and the caret's visual
 	// edge.
 	selAnchor, caret int
@@ -200,13 +289,21 @@ func build(c *ui.Context, doc *Document, options []EditorOptions, styled bool) u
 		v.selVersion = doc.selVersion
 		doc.mu.Unlock()
 	}
+	margin := v.opts.Margin
 	v.opts = EditorOptions{}
 	if len(options) > 0 {
 		v.opts = options[0]
 	}
+	if v.opts.Scroll != nil {
+		v.opts.Scroll.v = v
+	}
 	v.services = c.Services()
 	v.setLook(t, styled)
 	v.sync()
+	if margin[0] != v.opts.Margin[0] || margin[2] != v.opts.Margin[2] {
+		v.respace(0)
+		v.respace(len(v.paras) - 1)
+	}
 	focused := e.Focused()
 	if focused != v.focused {
 		v.focused = focused
@@ -267,10 +364,24 @@ func (v *view) setLook(t *ui.Theme, styled bool) {
 		tagStyle: v.opts.TagStyle,
 	}
 	if styled {
-		v.padX, v.padY = th.Padding[0], th.Padding[1]
+		v.pad, v.padY = th.Padding[0], th.Padding[1]
 	} else {
-		v.padX, v.padY = 0, 0
+		v.pad, v.padY = 0, 0
 	}
+	v.column(v.rect.W)
+}
+
+// column sets padX, the left edge of the column of text in an element w
+// wide, and returns the column's width.
+func (v *view) column(w float32) float32 {
+	l, r := v.pad+v.opts.Margin[3], v.pad+v.opts.Margin[1]
+	cw := max(w-l-r, 1)
+	if m := v.opts.MaxWidth; m > 0 && cw > m {
+		l += (cw - m) / 2
+		cw = m
+	}
+	v.padX = l
+	return cw
 }
 
 // sync gets the editor in step with its document: the paragraphs that
@@ -426,17 +537,11 @@ func (v *view) insets(st ParagraphStyle) (left, right float32) {
 	return left, right
 }
 
-// space returns the room above and below paragraph p: a heading's
-// margins, a block of code's padding at its ends.
+// space returns the room above and below paragraph p: its gaps, a block
+// of code's padding at its ends, the spacing within a quotation.
 func (v *view) space(p int, st ParagraphStyle) (above, below float32) {
 	look := &v.look
 	switch {
-	case st.Heading > 0:
-		h := look.heading(st.Heading)
-		if p > 0 {
-			above = look.size * h.Size * h.Top
-		}
-		below = look.size * h.Bottom
 	case st.CodeBlock:
 		if p == 0 || !v.para(p-1).style.CodeBlock {
 			above = look.size * look.CodeBlockPadding[1]
@@ -444,8 +549,59 @@ func (v *view) space(p int, st ParagraphStyle) (above, below float32) {
 		if p+1 >= len(v.paras) || !v.para(p+1).style.CodeBlock {
 			below = look.size * look.CodeBlockPadding[1]
 		}
+	case st.Quote && p+1 < len(v.paras):
+		if next := v.para(p + 1).style; next.Quote && next.Heading == 0 {
+			below = look.size * look.ParagraphSpacing
+		}
+	}
+	ga, gb := v.gaps(p, st)
+	return above + ga, below + gb
+}
+
+// gaps returns the room around paragraph p outside what its block paints
+// behind it: the margins at the ends of the text, a heading's, and the
+// spacing to the next paragraph.
+func (v *view) gaps(p int, st ParagraphStyle) (above, below float32) {
+	look := &v.look
+	if p == 0 {
+		above = v.opts.Margin[0]
+	}
+	if st.Heading > 0 {
+		h := look.heading(st.Heading)
+		if p > 0 {
+			above = look.size * h.Size * h.Top
+		}
+		below = look.size * h.Bottom
+	}
+	if p+1 >= len(v.paras) {
+		return above, below + v.opts.Margin[2]
+	}
+	if st.Heading > 0 {
+		return above, below
+	}
+	next := v.para(p + 1).style
+	switch {
+	case next.Heading > 0, st.CodeBlock && next.CodeBlock, st.Quote && next.Quote:
+	case st.List != NoList && next.List != NoList:
+		below = look.size * look.ListSpacing
+	default:
+		below = look.size * look.ParagraphSpacing
 	}
 	return above, below
+}
+
+// respace takes a change of the room around paragraph p, laid out, into
+// its height.
+func (v *view) respace(p int) {
+	if p < 0 || p >= len(v.paras) || v.paras[p].h == 0 {
+		return
+	}
+	pv := &v.paras[p]
+	if above, below := v.space(p, v.para(p).style); above+below != pv.space {
+		h := pv.h - pv.space + above + below
+		v.hs.add(p, float64(h-pv.h), 0)
+		pv.h, pv.space = h, above+below
+	}
 }
 
 // span returns how a run with attributes a looks in a paragraph of style
@@ -522,11 +678,7 @@ func (v *view) paraLayout(p int) *paraView {
 	if pv.layout != nil && pv.id == para.id && pv.runs == first && pv.nruns == len(para.runs) && pv.style == para.style && pv.compose == compose && pv.at == at {
 		// The space around it follows its neighbours, which may have
 		// changed without it: a code block's last line, the first heading.
-		if above, below := v.space(p, para.style); above+below != pv.space {
-			h := pv.h - pv.space + above + below
-			v.hs.add(p, float64(h-pv.h), 0)
-			pv.h, pv.space = h, above+below
-		}
+		v.respace(p)
 		return pv
 	}
 	composed := compose

@@ -47,6 +47,10 @@ func (ed *editor) layout(w, h, scale float32) {
 	ed.viewH = h
 	wrap := ed.o.wrap != ed.toggledWrap
 	ww := w - ed.textX - scrollbarWidth - 4
+	if m := ed.o.maxWidth; m > 0 && ww > m {
+		ed.textX += (ww - m) / 2
+		ww = m
+	}
 	if ed.o.wrapColumn > 0 {
 		ww = min(ww, float32(ed.o.wrapColumn)*v.charWidth)
 	}

@@ -489,3 +489,22 @@ func TestCodeEditorMultiClick(t *testing.T) {
 	ct.tt.Frame()
 	ct.want("[select customers from orders\n]x")
 }
+
+// A MaxWidth column is centered, and a click beside it goes to its line.
+func TestMaxWidthColumn(t *testing.T) {
+	st := &State{Buffer: NewBuffer("hello world\nsecond"), LineNumbers: LineNumbersOff, SoftWrap: true, MaxWidth: 200}
+	tt := ui.NewTester(func(c *ui.Context) {
+		View(c, st).Fill().AutoFocus()
+	}, 600, 400)
+	tt.Frame()
+	tt.Press(30, 5)
+	tt.Release(30, 5)
+	if s := st.Selection(); s.Head != 0 {
+		t.Fatalf("a click left of the column puts the caret at %d, not the start", s.Head)
+	}
+	tt.Press(560, 5)
+	tt.Release(560, 5)
+	if s := st.Selection(); s.Head != 11 {
+		t.Fatalf("a click right of the column puts the caret at %d, not the end of the line", s.Head)
+	}
+}

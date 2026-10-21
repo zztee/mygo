@@ -58,6 +58,9 @@ type State struct {
 	// FitContent makes the editor as high as its lines, to show in a
 	// scroll view or a list, rather than scrolling them itself.
 	FitContent bool
+	// MaxWidth narrows the text to a column at most MaxWidth DIPs wide,
+	// centered in the editor; 0 lets it fill the editor.
+	MaxWidth float32
 	// Placeholder shows while the buffer is empty.
 	Placeholder string
 	// Label names the editor for assistive technology.
@@ -192,7 +195,7 @@ type LineBackground struct {
 func (st *State) options() options {
 	return options{
 		readOnly: st.ReadOnly, font: st.Font, lineHeight: st.LineHeight, tabSize: st.TabSize, indent: st.Indent,
-		wrap: st.SoftWrap, wrapColumn: st.WrapColumn, lineNumbers: st.LineNumbers, whitespace: st.Whitespace,
+		wrap: st.SoftWrap, wrapColumn: st.WrapColumn, maxWidth: st.MaxWidth, lineNumbers: st.LineNumbers, whitespace: st.Whitespace,
 		wrapGuides: st.WrapGuides, indentGuides: !st.NoIndentGuides, scrollPastEnd: !st.NoScrollPastEnd && !st.FitContent,
 		autoClose: !st.NoAutoClose, folding: !st.NoFolding, activeLine: !st.NoActiveLine, cursorShape: st.CursorShape, fitContent: st.FitContent,
 		placeholder: st.Placeholder, label: st.Label, theme: st.Theme, bindings: st.Bindings, gutterMarks: st.GutterMarks,

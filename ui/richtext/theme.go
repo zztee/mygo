@@ -48,6 +48,11 @@ type Theme struct {
 	QuoteBar, QuoteText ui.Color
 	QuoteBarWidth       float32
 
+	// ParagraphSpacing is the room between paragraphs, in ems: none by
+	// default. ListSpacing is that between the items of a list, none
+	// when zero. Headings keep their own, and lines of code none.
+	ParagraphSpacing, ListSpacing float32
+
 	// Padding is the room around the text of an Editor, in DIPs across
 	// and down: the window theme's Space(3) and Space(2.5). An EditorBase
 	// has none, its room the app's.
