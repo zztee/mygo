@@ -475,20 +475,74 @@ func TestCodeFenceKeepsLanguage(t *testing.T) {
 	typeRunes(tt, "const n = 1")
 	var lines []string
 	for _, p := range doc.Text().Paragraphs() {
-		if !p.Style.CodeBlock {
-			t.Fatalf("not code: %+v", p)
+		if !p.Style.CodeBlock || p.Style.Language != "ts" {
+			t.Fatalf("not ts code: %+v", p)
 		}
 		text := ""
 		for _, r := range p.Runs {
-			if r.Text != "" && r.Attributes.Tag != "lang:ts" {
+			if r.Attributes.Tag != "" {
 				t.Fatalf("tag %q on %q", r.Attributes.Tag, r.Text)
 			}
 			text += r.Text
 		}
 		lines = append(lines, text)
 	}
-	if strings.Join(lines, "\n") != "\nimport x\nconst n = 1" && strings.Join(lines, "\n") != "import x\nconst n = 1" {
+	if got := strings.Join(lines, "\n"); got != "import x\nconst n = 1" {
 		t.Fatalf("%q", lines)
+	}
+	if got := doc.Text().Markdown(); got != "```ts\nimport x\nconst n = 1\n```" {
+		t.Fatalf("markdown %q", got)
+	}
+}
+
+// A blank line inside a block of code keeps it one block, and blocks of
+// two languages next to each other stay two.
+func TestCodeBlockLanguageRoundTrip(t *testing.T) {
+	for _, md := range []string{
+		"```go\na := 1\n\nb := 2\n```",
+		"```go\nx\n```\n\n```py\ny\n```",
+		"> ```sh\n> ls\n> \n> pwd\n> ```",
+	} {
+		if got := ParseMarkdown(md).Markdown(); got != md {
+			t.Errorf("%q came back %q", md, got)
+		}
+	}
+}
+
+// Leaving a block of code by Enter on its empty last line leaves its
+// language behind.
+func TestCodeBlockExitDropsLanguage(t *testing.T) {
+	doc := NewDocument(Text{})
+	tt, _ := richTester(t, doc)
+	typeRunes(tt, "```go")
+	tt.Key(0, ui.KeyEnter)
+	typeRunes(tt, "x")
+	tt.Key(0, ui.KeyEnter)
+	tt.Key(0, ui.KeyEnter)
+	typeRunes(tt, "prose")
+	ps := doc.Text().Paragraphs()
+	var last Paragraph
+	for _, p := range ps {
+		last = p
+	}
+	if last.Style != (ParagraphStyle{}) {
+		t.Fatalf("style after the block %+v", last.Style)
+	}
+	if got := doc.Text().Markdown(); got != "```go\nx\n```\n\nprose" {
+		t.Fatalf("markdown %q", got)
+	}
+}
+
+// Enter at the end of a list's first item that starts at 5 numbers the
+// next 6.
+func TestNumberedListStartStaysFirst(t *testing.T) {
+	doc := NewDocument(ParseMarkdown("5. foo"))
+	doc.SetSelection(3, 3)
+	tt, _ := richTester(t, doc)
+	tt.Key(0, ui.KeyEnter)
+	typeRunes(tt, "bar")
+	if got := doc.Text().Markdown(); got != "5. foo\n6. bar" {
+		t.Fatalf("markdown %q", got)
 	}
 }
 

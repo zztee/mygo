@@ -52,17 +52,13 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 		st.Heading = b.Level
 		m.inlinePara(st, m.d.Inlines(i), Attributes{})
 	case parser.CodeBlock:
-		st.CodeBlock, st.Heading = true, 0
-		tag := ""
-		if lang := b.Language(); lang != "" {
-			tag = "lang:" + lang
-		}
+		st.CodeBlock, st.Heading, st.Language = true, 0, b.Language()
 		n := m.d.LineCount(i)
 		for k := range n {
 			line, _ := m.d.Line(i, k)
 			p := Paragraph{Style: st}
-			if line != "" || tag != "" {
-				p.Runs = []Run{{Text: line, Attributes: Attributes{Tag: tag}}}
+			if line != "" {
+				p.Runs = []Run{{Text: line}}
 			}
 			m.paras = append(m.paras, p)
 		}
@@ -96,7 +92,6 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 			m.item(it, ist, depth+1)
 		}
 	case parser.Table:
-		spec := alignSpec(b.Align)
 		for row := range m.d.Children(i) {
 			p := Paragraph{Style: st}
 			var a Attributes
@@ -112,9 +107,6 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 				for _, r := range m.runs(m.d.Inlines(cell), a) {
 					p.Runs = addMDRun(p.Runs, r)
 				}
-			}
-			if spec != "" && m.d.Block(row).Header && len(p.Runs) > 0 {
-				p.Runs[0].Attributes.Tag = "cols:" + spec
 			}
 			m.paras = append(m.paras, p)
 		}
@@ -275,32 +267,6 @@ func (m *mdReader) tag(s string, out *[]Run, a Attributes) {
 	} else {
 		m.html[which]++
 	}
-}
-
-// alignSpec packs a table's column alignment as "lcr-", or "" when every
-// column is plain so a delimiter row of --- still round-trips.
-func alignSpec(al []parser.Align) string {
-	if len(al) == 0 {
-		return ""
-	}
-	any := false
-	b := make([]byte, len(al))
-	for i, a := range al {
-		switch a {
-		case parser.AlignLeft:
-			b[i], any = 'l', true
-		case parser.AlignCenter:
-			b[i], any = 'c', true
-		case parser.AlignRight:
-			b[i], any = 'r', true
-		default:
-			b[i] = '-'
-		}
-	}
-	if !any {
-		return ""
-	}
-	return string(b)
 }
 
 // addMDRun appends r to runs, joined to the last when their attributes

@@ -57,8 +57,9 @@ func (v *view) replace(start, end int, s string) {
 	if d.typing != nil {
 		attrs = *d.typing
 	}
-	if lang := codeLangOf(d.text, start); lang != "" {
-		attrs.Tag = "lang:" + lang
+	if inCode(d.text, start) {
+		// Code takes its colors from its language, not from the run
+		// before it.
 		attrs.Color = ui.Color{}
 	}
 	v.lockedEdit(func(e *Edit) { e.ReplaceString(start, end, s, attrs) })
@@ -246,29 +247,13 @@ func (v *view) enter() {
 	}
 	if !v.opts.NoMarkdown && a == z && v.caret == pe && !st.CodeBlock {
 		if lang, ok := codeFenceLang(v.lineOf(p)); ok {
-			tag := ""
-			if lang != "" {
-				tag = "lang:" + lang
-			}
 			v.edit(func(e *Edit) {
-				e.ReplaceString(ps, pe, "", Attributes{Tag: tag})
+				e.ReplaceString(ps, pe, "", Attributes{})
 				e.FormatParagraphs(ps, ps, func(s *ParagraphStyle) {
-					*s = ParagraphStyle{CodeBlock: true, Quote: s.Quote, Indent: s.Indent}
+					*s = ParagraphStyle{CodeBlock: true, Language: lang, Quote: s.Quote, Indent: s.Indent}
 				})
-				if tag != "" && e.Text().Len() > ps {
-					e.Format(ps, ps+1, func(a *Attributes) {
-						a.Tag = tag
-						a.Color = ui.Color{}
-					})
-				}
 				e.Select(ps, ps)
 			})
-			if tag != "" {
-				v.doc.lock()
-				keep := Attributes{Tag: tag}
-				v.doc.typing = &keep
-				v.doc.mu.Unlock()
-			}
 			return
 		}
 	}
@@ -295,6 +280,8 @@ func (v *view) enter() {
 			}
 			s.Checked = false
 		})
+		// The number a list starts at stays with its first item.
+		e.FormatParagraphs(v.caret, v.caret, func(s *ParagraphStyle) { s.Start = 0 })
 	})
 	d.anchor, d.caret = v.caret, v.caret
 	keep := attrs
@@ -318,33 +305,12 @@ func codeFenceLang(line string) (string, bool) {
 	return info, true
 }
 
-// codeLangOf returns the language of the code block holding rune at.
-func codeLangOf(t Text, at int) string {
+// inCode reports whether rune at of t is in a block of code.
+func inCode(t Text, at int) bool {
 	if t.Len() == 0 {
-		return ""
+		return false
 	}
-	if at >= t.Len() {
-		at = t.Len() - 1
-	}
-	p := t.paraAt(at)
-	para := seqAt(t.seq(), p)
-	if !para.style.CodeBlock {
-		return ""
-	}
-	for {
-		if lang := fenceLang(para); lang != "" {
-			return lang
-		}
-		if p == 0 {
-			return ""
-		}
-		prev := seqAt(t.seq(), p-1)
-		if !sameCode(prev, para) {
-			return ""
-		}
-		p--
-		para = prev
-	}
+	return seqAt(t.seq(), t.paraAt(min(at, t.Len()-1))).style.CodeBlock
 }
 
 // typed runs the Markdown shortcuts after s was typed at the caret.

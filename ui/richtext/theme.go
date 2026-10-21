@@ -53,6 +53,10 @@ type Theme struct {
 	// when zero. Headings keep their own, and lines of code none.
 	ParagraphSpacing, ListSpacing float32
 
+	// CodeLanguageLabel shows a block of code's language at its top
+	// right, with room for it above the first line.
+	CodeLanguageLabel bool
+
 	// Padding is the room around the text of an Editor, in DIPs across
 	// and down: the window theme's Space(3) and Space(2.5). An EditorBase
 	// has none, its room the app's.

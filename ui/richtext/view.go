@@ -63,6 +63,10 @@ type EditorOptions struct {
 	HideScrollbar bool
 	// Scroll, when set, tells where the editor is scrolled and scrolls it.
 	Scroll *Scroll
+	// Measure lays out the paragraphs out of view too, a few milliseconds
+	// a frame, so that the text's height is exact rather than estimated,
+	// for an app that shows it, as Scroll's Content.
+	Measure bool
 }
 
 // Scroll is where an editor is scrolled, for an app showing its own scroll
@@ -278,10 +282,9 @@ type view struct {
 	// text of numbersOf.
 	numbers   map[int]int
 	numbersOf Text
-	// lexAt is the document version lex was built for. lex[i] is the
-	// tokenizer state after paragraph i.
-	lexAt uint64
-	lex   []uint64
+	// lex[i] is the tokenizer state after paragraph i, for the
+	// paragraphs before the first an edit changed.
+	lex []uint64
 }
 
 type editMode uint8
@@ -340,10 +343,13 @@ func build(c *ui.Context, doc *Document, options []EditorOptions, styled bool) u
 		v.selVersion = doc.selVersion
 		doc.mu.Unlock()
 	}
-	margin := v.opts.Margin
+	margin, syntax := v.opts.Margin, v.opts.Syntax != nil
 	v.opts = EditorOptions{}
 	if len(options) > 0 {
 		v.opts = options[0]
+	}
+	if syntax != (v.opts.Syntax != nil) {
+		v.lex = v.lex[:0]
 	}
 	if v.opts.Scroll != nil {
 		v.opts.Scroll.v = v
@@ -456,6 +462,7 @@ func (v *view) lockedSync() (change, bool) {
 		} else {
 			v.shown = d.text
 			v.paras = make([]paraView, d.text.ParagraphCount())
+			v.lex = v.lex[:0]
 			v.laid = 0
 			v.resetHeights()
 			moved = false
@@ -486,6 +493,8 @@ func (v *view) lockedSync() (change, bool) {
 func (v *view) replaced(c change, now Text) {
 	pa, pz := v.shown.paraAt(c.start), v.shown.paraAt(c.oldEnd)
 	npz := now.paraAt(c.newEnd)
+	// The lines of code after the change may start in another state.
+	v.lex = v.lex[:min(len(v.lex), pa)]
 	for _, p := range v.paras[pa : pz+1] {
 		if p.layout != nil {
 			v.laid--
@@ -596,7 +605,8 @@ func (v *view) space(p int, st ParagraphStyle) (above, below float32) {
 	case st.CodeBlock:
 		if p == 0 || !v.para(p-1).style.CodeBlock {
 			above = look.size * look.CodeBlockPadding[1]
-			if fenceLang(v.para(p)) != "" {
+			if look.CodeLanguageLabel && st.Language != "" {
+				// Room for the label above the first line.
 				above += look.size * 1.05
 			}
 		}
@@ -816,11 +826,7 @@ func (v *view) codeLineSpans(p int, line, compose string, at int, st ParagraphSt
 	if v.opts.Syntax == nil || !st.CodeBlock {
 		return nil, false
 	}
-	lang := v.fenceLanguage(p)
-	if lang == "" {
-		return nil, false
-	}
-	l := editor.LanguageNamed(lang)
+	l := editor.LanguageNamed(st.Language)
 	if l == nil || l.Tokenizer == nil {
 		return nil, false
 	}
@@ -838,28 +844,23 @@ func (v *view) codeLineSpans(p int, line, compose string, at int, st ParagraphSt
 		enter = v.stateBefore(p)
 	}
 	tokens, _ := l.Tokenizer.Tokenize(shown, enter, nil)
-	tag := "lang:" + lang
 	var spans []ui.Span
 	prev := 0
 	for _, tk := range tokens {
 		if tk.End <= prev || tk.End > len(shown) {
 			continue
 		}
-		spans = append(spans, v.look.span(shown[prev:tk.End], Attributes{Tag: tag, Color: v.opts.Syntax(tk.Kind)}, st))
+		spans = append(spans, v.look.span(shown[prev:tk.End], Attributes{Color: v.opts.Syntax(tk.Kind)}, st))
 		prev = tk.End
 	}
 	if prev < len(shown) {
-		spans = append(spans, v.look.span(shown[prev:], Attributes{Tag: tag}, st))
+		spans = append(spans, v.look.span(shown[prev:], Attributes{}, st))
 	}
 	return spans, true
 }
 
 // stateBefore returns the tokenizer state paragraph p starts in.
 func (v *view) stateBefore(p int) uint64 {
-	if v.lexAt != v.version {
-		v.lex = v.lex[:0]
-		v.lexAt = v.version
-	}
 	for len(v.lex) < p {
 		i := len(v.lex)
 		prev := uint64(0)
@@ -885,7 +886,7 @@ func (v *view) codeExit(i int, prev uint64) uint64 {
 	if i > 0 && sameCode(v.para(i-1), para) {
 		enter = prev
 	}
-	l := editor.LanguageNamed(v.fenceLanguage(i))
+	l := editor.LanguageNamed(para.style.Language)
 	if l == nil || l.Tokenizer == nil {
 		return 0
 	}
@@ -893,23 +894,11 @@ func (v *view) codeExit(i int, prev uint64) uint64 {
 	return st
 }
 
-// fenceLanguage returns the language of the code block holding paragraph p.
-func (v *view) fenceLanguage(p int) string {
-	para := v.para(p)
-	if para == nil || !para.style.CodeBlock {
-		return ""
-	}
-	for p > 0 && sameCode(v.para(p-1), v.para(p)) {
-		p--
-	}
-	return fenceLang(v.para(p))
-}
-
 func sameCode(a, b *richPara) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.style.CodeBlock && b.style.CodeBlock && a.style.Quote == b.style.Quote && a.style.Indent == b.style.Indent
+	return sameBlockOfCode(a.style, b.style)
 }
 
 // maxLaid is how many paragraphs keep their layouts out of view.

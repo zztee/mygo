@@ -42,13 +42,17 @@ func (t Text) Markdown() string {
 		switch {
 		case st.CodeBlock:
 			fence := "```"
-			for k := i; k < len(paras) && paras[k].Style.CodeBlock; k++ {
-				for strings.Contains(plainOf(paras[k]), fence) {
+			end := i + 1
+			for end < len(paras) && sameBlockOfCode(st, paras[end].Style) {
+				end++
+			}
+			for _, q := range paras[i:end] {
+				for strings.Contains(plainOf(q), fence) {
 					fence += "`"
 				}
 			}
-			b.WriteString(quote + fence + "\n")
-			for ; i < len(paras) && paras[i].Style.CodeBlock; i++ {
+			b.WriteString(quote + fence + st.Language + "\n")
+			for ; i < end; i++ {
 				b.WriteString(quote + plainOf(paras[i]) + "\n")
 			}
 			i--
@@ -451,4 +455,10 @@ func markdownURL(u string) string {
 		return "<" + strings.NewReplacer("<", "%3C", ">", "%3E").Replace(u) + ">"
 	}
 	return u
+}
+
+// sameBlockOfCode reports whether lines of code of styles a and b, one
+// after the other, are the same block.
+func sameBlockOfCode(a, b ParagraphStyle) bool {
+	return a.CodeBlock && b.CodeBlock && a.Quote == b.Quote && a.Indent == b.Indent && a.Language == b.Language
 }

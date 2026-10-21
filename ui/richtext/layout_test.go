@@ -90,14 +90,15 @@ func TestRichTextVerticalAcrossSpacing(t *testing.T) {
 	}
 }
 
-// Scroll tells where the editor is scrolled, scrolls it, and the editor
-// paints no bar of its own once hidden.
+// Scroll tells where the editor is scrolled, scrolls it, Measure measures
+// what is out of view, and the editor paints no bar of its own once
+// hidden.
 func TestRichTextScrollState(t *testing.T) {
 	text := strings.TrimSuffix(strings.Repeat("A line of text\n", 80), "\n")
 	doc := NewDocument(NewText(text))
 	doc.SetSelection(0, 0)
 	var s Scroll
-	tt := baseTester(doc, EditorOptions{Scroll: &s, HideScrollbar: true})
+	tt := baseTester(doc, EditorOptions{Scroll: &s, HideScrollbar: true, Measure: true})
 	if s.Viewport() != 400 || s.Content() <= 400 {
 		t.Fatalf("viewport %v, content %v", s.Viewport(), s.Content())
 	}

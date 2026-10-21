@@ -70,13 +70,7 @@ func (a Attributes) Bold() bool { return a.Weight >= 600 }
 // NSTextView and the expand rules of Peritext and Loro leave them; every
 // other attribute carries on to what is typed after it.
 func (a Attributes) extending() Attributes {
-	tag := a.Tag
 	a.Link, a.Code, a.Tag, a.Attachment = "", false, "", nil
-	// A code block's language stays with the newline, so the next line
-	// is still that language. Other tags, as mentions, do not.
-	if strings.HasPrefix(tag, "lang:") {
-		a.Tag = tag
-	}
 	return a
 }
 
@@ -160,6 +154,9 @@ func (s ParagraphStyle) normalized() ParagraphStyle {
 	if s.List != Tasks {
 		s.Checked = false
 	}
+	if !s.CodeBlock {
+		s.Language = ""
+	}
 	return s
 }
 
@@ -186,6 +183,10 @@ type ParagraphStyle struct {
 	// the monospaced font, its spaces kept.
 	Quote     bool `json:"quote,omitempty"`
 	CodeBlock bool `json:"codeBlock,omitempty"`
+	// Language is the language a block of code was given, as "go": its
+	// fence's info, and how it is colored. Lines next to each other make
+	// one block only when they have the same.
+	Language string `json:"language,omitempty"`
 }
 
 // Run is a run of text with its attributes.

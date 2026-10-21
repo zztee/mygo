@@ -2,7 +2,6 @@ package richtext
 
 import (
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -69,14 +68,13 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		top, size := v.thumbBox()
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: r.Y + top, W: 5, H: size}, look.Text.Alpha(0.3), 2.5)
 	}
-	if v.opts.Scroll != nil && v.measure(4*time.Millisecond) {
+	if v.opts.Measure && v.measure(4*time.Millisecond) {
 		p.AnimationFrame()
 	}
 }
 
 // measure lays out paragraphs not measured yet, out of view, for a while,
-// as an app showing where the text is scrolled wants their heights, and
-// reports whether some are left.
+// and reports whether some are left.
 func (v *view) measure(d time.Duration) bool {
 	if _, unknown := v.hs.totals(); unknown == 0 {
 		return false
@@ -119,8 +117,8 @@ func (v *view) paintBlock(p *ui.Painter, i int, st ParagraphStyle, x, top, heigh
 			fill.H += 2 * radius
 		}
 		p.Clip(box, 0, func() { p.Fill(fill, look.CodeBlockBackground, radius) })
-		if first {
-			if lang := fenceLang(v.para(i)); lang != "" {
+		if first && look.CodeLanguageLabel {
+			if lang := st.Language; lang != "" {
 				size := look.size * 0.62
 				if size < 11 {
 					size = 11
@@ -290,17 +288,4 @@ func (v *view) paintAttachments(p *ui.Painter, i int, pv *paraView, x, y float32
 			}
 		}
 	}
-}
-
-// fenceLang is the language a code paragraph was given, as "go".
-func fenceLang(para *richPara) string {
-	if para == nil {
-		return ""
-	}
-	for _, r := range para.runs {
-		if name, ok := strings.CutPrefix(r.a.Tag, "lang:"); ok && name != "" {
-			return name
-		}
-	}
-	return ""
 }
