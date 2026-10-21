@@ -96,3 +96,18 @@ func BenchmarkScrollFrame(b *testing.B) {
 		tt.Scroll(500, 400, 0, 120)
 	}
 }
+
+// BenchmarkParagraphs reads every paragraph of a document, as saving it
+// to Markdown does.
+func BenchmarkParagraphs(b *testing.B) {
+	for _, n := range benchParagraphs {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			t := longText(n)
+			b.ReportAllocs()
+			for b.Loop() {
+				for range t.Paragraphs() {
+				}
+			}
+		})
+	}
+}

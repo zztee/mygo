@@ -507,9 +507,23 @@ func (t Text) Paragraphs() iter.Seq2[int, Paragraph] {
 	return func(yield func(int, Paragraph) bool) {
 		start := 0
 		tx := rope.TextOf(t.text)
+		// Lines are read a batch at a time, as EachLine reads them: finding
+		// each in the tree scans its chunk from the start.
+		var batch string
+		next := 0 // the line after the batch
 		seqEach(t.seq(), 0, func(i int, p *richPara) bool {
-			line := tx.Line(i)
+			if i >= next {
+				next = min(i+256, tx.LineCount())
+				batch = tx.Slice(tx.LineStart(i), tx.LineEnd(next-1))
+			}
+			line := batch
+			if n := strings.IndexByte(batch, '\n'); n >= 0 {
+				line, batch = batch[:n], batch[n+1:]
+			}
 			par := Paragraph{Style: p.style}
+			if line != "" {
+				par.Runs = make([]Run, 0, len(p.runs))
+			}
 			off := 0
 			for _, r := range p.runs {
 				if off >= len(line) {

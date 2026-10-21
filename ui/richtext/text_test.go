@@ -3,6 +3,7 @@ package richtext
 import (
 	"github.com/egoist/mygo/ui"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -153,6 +154,42 @@ func TestAttributedTextOf(t *testing.T) {
 	}
 	if !TextOf(Paragraph{Runs: []Run{{Text: "a\nb"}}}).Equal(NewText("a\nb")) {
 		t.Fatal("a newline in a run starts a paragraph")
+	}
+}
+
+// Paragraphs gives back every paragraph of a text of many chunks and
+// batches of lines: empty ones, long ones and ones of CJK.
+func TestParagraphsOfLongText(t *testing.T) {
+	var want []Paragraph
+	for i := range 3000 {
+		var p Paragraph
+		switch i % 5 {
+		case 0:
+			p.Style.Heading = 2
+			p.Runs = []Run{{Text: "Heading"}}
+		case 1:
+		case 2:
+			p.Runs = []Run{{Text: "这是一段中文文字"}, {Text: "粗体", Attributes: Attributes{Weight: 700}}}
+		case 3:
+			p.Runs = []Run{{Text: strings.Repeat("long ", 200+i%300)}}
+		default:
+			p.Style.List = Bullets
+			p.Runs = []Run{{Text: "item "}, {Text: "link", Attributes: Attributes{Link: "https://example.com"}}}
+		}
+		want = append(want, p)
+	}
+	i := 0
+	for _, p := range TextOf(want...).Paragraphs() {
+		if i >= len(want) {
+			t.Fatalf("more than %d paragraphs", len(want))
+		}
+		if p.Style != want[i].Style || !slices.Equal(p.Runs, want[i].Runs) {
+			t.Fatalf("paragraph %d: %+v, want %+v", i, p, want[i])
+		}
+		i++
+	}
+	if i != len(want) {
+		t.Fatalf("%d paragraphs, want %d", i, len(want))
 	}
 }
 
