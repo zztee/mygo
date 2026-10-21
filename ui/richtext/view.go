@@ -76,7 +76,8 @@ type EditorOptions struct {
 	// attachment, for an app that makes its own of presses there, as on
 	// a cell of a table it draws. i is the attachment's rune; x and y are
 	// where in it, in its own DIPs, those of Attachment.Width and Height,
-	// however the box shrinks to the column; ev is the press, its Button
+	// however the box shrinks to the column (or, cropped, in the part that
+	// shows); ev is the press, its Button
 	// telling the secondary from the primary. Returning true takes a
 	// press of the primary button: the editor neither moves the caret nor
 	// selects. The secondary button opens the context menu after it
@@ -90,6 +91,13 @@ type EditorOptions struct {
 	// after an item was chosen, where the item's Chosen reports it, as
 	// the function given to ui.Element.ContextMenu does.
 	ContextMenu func(m *ui.Menu, attachment int)
+	// OnAttachmentScroll runs as the wheel or the trackpad scrolls over
+	// the box of an attachment, before the editor scrolls. i is the
+	// attachment's rune, x and y where in it, as OnAttachment has them,
+	// and ev the scroll: its DX and DY, and Mods, Shift turning a wheel
+	// sideways. Returning true takes the scroll, as an app scrolls a wide
+	// table it draws sideways (Attachment.Crop); false scrolls the editor.
+	OnAttachmentScroll func(i int, x, y float32, ev ui.InputEvent) bool
 	// Below adds room under a paragraph, after its block's padding, and
 	// draws there, as an app shows what lines of source make, a formula
 	// or a diagram, under the last of them. It gets the text shown, the
@@ -770,7 +778,11 @@ func (look *look) span(text string, a Attributes, st ParagraphStyle) ui.Span {
 		w, h := at.size()
 		d := min(max(at.Descent, 0), h)
 		if look.width > 0 && w > look.width {
-			w, h, d = look.width, h*look.width/w, d*look.width/w
+			if at.Crop {
+				w = look.width
+			} else {
+				w, h, d = look.width, h*look.width/w, d*look.width/w
+			}
 		}
 		s.ObjectWidth, s.ObjectHeight, s.ObjectDescent = w, h, d
 	}

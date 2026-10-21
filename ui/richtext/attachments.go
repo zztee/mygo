@@ -4,8 +4,8 @@ import "github.com/egoist/mygo/ui"
 
 // AttachmentBox returns the box of the attachment at rune i, in the
 // editor's own coordinates, the space of its pointer events and IndexAt,
-// as the editor lays it out: shrunk to the column when wider, and
-// scrolled. An app puts an element of its own over the attachment there,
+// as the editor lays it out: shrunk to the column when wider, or cut to
+// it when cropped (Attachment.Crop), and scrolled. An app puts an element of its own over the attachment there,
 // as a field over a cell of a table it draws. It reports false when rune
 // i holds no attachment, or before the editor is first drawn.
 func (s *Scroll) AttachmentBox(i int) (ui.Rect, bool) {
@@ -46,9 +46,20 @@ func (v *view) pressAttachment(ev ui.InputEvent) bool {
 	return v.opts.OnAttachment != nil && v.opts.OnAttachment(i, ax, ay, ev) && ev.Button == 0
 }
 
+// scrollAttachment tells the app of a scroll over an attachment's box
+// (EditorOptions.OnAttachmentScroll), and reports whether it took it.
+func (v *view) scrollAttachment(ev ui.InputEvent) bool {
+	if v.opts.OnAttachmentScroll == nil {
+		return false
+	}
+	x, y := v.contentPoint(ev.X, ev.Y)
+	i, ax, ay, ok := v.attachmentAt(x, y)
+	return ok && v.opts.OnAttachmentScroll(i, ax, ay, ev)
+}
+
 // attachmentAt returns the attachment whose box holds (x, y) of the
 // content, its rune, and where in it the point is, in the attachment's
-// own size.
+// own size: in the part that shows, when it is cropped.
 func (v *view) attachmentAt(x float32, y float64) (i int, ax, ay float32, ok bool) {
 	if len(v.paras) == 0 {
 		return 0, 0, 0, false
@@ -72,7 +83,7 @@ func (v *view) attachmentAt(x float32, y float64) (i int, ax, ay float32, ok boo
 		}
 		w, h := at.size()
 		sx, sy := float32(1), float32(1)
-		if w > 0 && h > 0 {
+		if w > 0 && h > 0 && !at.Crop {
 			sx, sy = w/r.W, h/r.H
 		}
 		return g, (px - r.X) * sx, (py - r.Y) * sy, true

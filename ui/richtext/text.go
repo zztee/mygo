@@ -89,8 +89,14 @@ type Attachment struct {
 	// Image is drawn in the box, unless Draw draws it.
 	Image ui.ImageSource
 	// Width and Height are the size of the box in DIPs; zero takes the
-	// image's size. A box wider than the editor is scaled down to fit.
+	// image's size. A box wider than the editor is scaled down to fit,
+	// unless Crop is set.
 	Width, Height float32
+	// Crop cuts a box wider than the editor to the editor's width,
+	// keeping its height, instead of scaling it down: Draw gets the
+	// narrower box and draws the part that shows, as an app scrolls a
+	// wide table sideways (EditorOptions.OnAttachmentScroll).
+	Crop bool
 	// Descent is how much of Height hangs below the line's baseline, as a
 	// typeset formula's depth; zero stands the box on the baseline.
 	Descent float32
