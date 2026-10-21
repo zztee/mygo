@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -139,6 +140,59 @@ func BenchmarkDiffViewerType(b *testing.B) {
 			tt.Type("x")
 		} else {
 			tt.Key(0, ui.KeyBackspace)
+		}
+	}
+}
+
+// wrapView is the view of an editor wrapping its lines, to call
+// wrapBreaks on with the widths of its font.
+func wrapView(t testing.TB) *view {
+	t.Helper()
+	st := &State{Buffer: NewBuffer(""), SoftWrap: true, LineNumbers: LineNumbersOff}
+	tt := ui.NewTester(func(c *ui.Context) { View(c, st).Fill() }, 600, 400)
+	tt.Frame()
+	v := &st.ed.view
+	v.wrap = true
+	return v
+}
+
+// cjkProse is a line of about n runes of Chinese prose with its
+// punctuation.
+func cjkProse(n int) string {
+	const sentence = "在源码模式下，中文按禁则断行：句号、逗号和右括号不出现在行首，「左括号」不留在行尾。"
+	var b strings.Builder
+	for k := 0; k < n; k += utf8.RuneCountInString(sentence) {
+		b.WriteString(sentence)
+	}
+	return b.String()
+}
+
+// BenchmarkWrapCJK finds where 2,000 lines of 200 CJK characters wrap at
+// 40 columns, as measuring the rows of a long Chinese document does.
+func BenchmarkWrapCJK(b *testing.B) {
+	v := wrapView(b)
+	v.wrapWidth = v.widths.of('中') * 40
+	line := cjkProse(200)
+	b.SetBytes(int64(len(line)) * 2000)
+	b.ReportAllocs()
+	for b.Loop() {
+		for range 2000 {
+			v.wrapBreaks(line)
+		}
+	}
+}
+
+// BenchmarkWrapCode finds where 2,000 long lines of Go wrap at 80
+// columns.
+func BenchmarkWrapCode(b *testing.B) {
+	v := wrapView(b)
+	v.wrapWidth = v.widths.of('x') * 80
+	line := strings.Repeat("\tif err := r.Check(\"x\\n\", 42); err != nil { return fmt.Errorf(`bad: %w`, err) } ", 3)
+	b.SetBytes(int64(len(line)) * 2000)
+	b.ReportAllocs()
+	for b.Loop() {
+		for range 2000 {
+			v.wrapBreaks(line)
 		}
 	}
 }

@@ -654,30 +654,35 @@ func (v *view) wrapBreaks(s string) []int {
 	indent := float32(0)
 	x := float32(0)
 	start := 0
-	last := -1 // the last place to break
-	var prev rune
 	for i, r := range s {
-		if i > start && canBreak(prev, r) {
-			last = i
-		}
 		w := v.widths.of(r)
 		if x+w > width && i > start {
-			at := i
-			if last > start {
-				at = last
-			}
+			at := lastBreak(s, start, i, r)
 			breaks = append(breaks, at)
 			if indent == 0 {
 				indent = v.wrapIndent(s)
 			}
 			// Measure the new row from its start, after the indent.
 			x = indent + v.widths.width(s[at:i])
-			start, last = at, -1
+			start = at
 		}
 		x += w
-		prev = r
 	}
 	return breaks
+}
+
+// lastBreak returns the last place after start, up to i, the place of r,
+// where s may break, looking back from i; i when there is none.
+func lastBreak(s string, start, i int, r rune) int {
+	for j := i; j > start; {
+		prev, size := utf8.DecodeLastRuneInString(s[:j])
+		if canBreak(prev, r) {
+			return j
+		}
+		j -= size
+		r = prev
+	}
+	return i
 }
 
 // wrapIndent is how far rows after the first are indented: as far as the
