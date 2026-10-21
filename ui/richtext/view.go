@@ -768,10 +768,11 @@ func (look *look) span(text string, a Attributes, st ParagraphStyle) ui.Span {
 	if at := a.Attachment; at != nil {
 		// A box of the attachment's size, scaled down to the width.
 		w, h := at.size()
+		d := min(max(at.Descent, 0), h)
 		if look.width > 0 && w > look.width {
-			w, h = look.width, h*look.width/w
+			w, h, d = look.width, h*look.width/w, d*look.width/w
 		}
-		s.ObjectWidth, s.ObjectHeight = w, h
+		s.ObjectWidth, s.ObjectHeight, s.ObjectDescent = w, h, d
 	}
 	return s
 }

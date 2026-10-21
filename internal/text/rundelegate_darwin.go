@@ -58,12 +58,12 @@ func (d *delegates) reset(n int) {
 }
 
 // delegate returns a run delegate, owned, giving object k its height and
-// width, standing on the baseline.
-func (d *delegates) delegate(k int, width, height float32) uintptr {
+// width, standing on the baseline with descent of its height below it.
+func (d *delegates) delegate(k int, width, height, descent float32) uintptr {
 	if d.create == 0 || d.attribute == 0 || k >= len(d.metrics) {
 		return 0
 	}
-	d.metrics[k] = [3]float64{float64(height), 0, float64(width)}
+	d.metrics[k] = [3]float64{float64(height - descent), float64(descent), float64(width)}
 	r, _, _ := purego.SyscallN(d.create, uintptr(unsafe.Pointer(&d.callbacks)), uintptr(unsafe.Pointer(&d.metrics[k])))
 	return r
 }

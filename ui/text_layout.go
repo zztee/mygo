@@ -149,7 +149,7 @@ func shapeTextAligned(s string, font Font, shape TextShape, spans []Span) *TextL
 
 // TextObject is an inline object of a TextLayout (Span.ObjectWidth): the
 // UTF-16 offset of its object replacement character, and its box,
-// standing on its line's baseline.
+// standing on its line's baseline, its ObjectDescent below it.
 type TextObject struct {
 	Index int
 	Rect  Rect
@@ -170,16 +170,14 @@ func (t *TextLayout) Objects() []TextObject {
 			if spans == nil {
 				spans = text.DecodeSpans(t.l.Params.Spans)
 			}
-			h := float32(0)
-			end := 0
+			var h, d float32
 			for _, sp := range spans {
-				end = sp.End
-				if g.Cluster < end {
-					h = sp.ObjectHeight
+				if g.Cluster < sp.End {
+					h, d = sp.ObjectHeight, sp.ObjectDescent
 					break
 				}
 			}
-			out = append(out, TextObject{Index: t.units[g.Cluster], Rect: Rect{X: g.X, Y: line.Baseline - h, W: g.Advance, H: h}})
+			out = append(out, TextObject{Index: t.units[g.Cluster], Rect: Rect{X: g.X, Y: line.Baseline - (h - d), W: g.Advance, H: h}})
 		}
 	}
 	return out

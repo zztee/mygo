@@ -35,3 +35,33 @@ func TestTextObjects(t *testing.T) {
 		t.Errorf("narrow height %v: no line broke at the object", nh)
 	}
 }
+
+// TestTextObjectDescent hangs an object's descent below the baseline, as a
+// formula's depth: the line rises less and drops more than for the same
+// box standing on the baseline.
+func TestTextObjectDescent(t *testing.T) {
+	font := Font{Size: 14}
+	box := func(descent float32) (Rect, float32) {
+		l := ShapeRichText([]Span{{Text: "a"}, {Text: "￼", ObjectWidth: 40, ObjectHeight: 50, ObjectDescent: descent}, {Text: "b"}}, font, 0)
+		objects := l.Objects()
+		if len(objects) != 1 {
+			t.Fatalf("objects %+v", objects)
+		}
+		_, h := l.Size()
+		return objects[0].Rect, h
+	}
+	standing, sh := box(0)
+	hanging, hh := box(20)
+	if hanging.H != 50 || standing.H != 50 {
+		t.Fatalf("boxes %+v %+v", standing, hanging)
+	}
+	// Standing, the box's bottom is the baseline, above the text's
+	// descent; hanging 20 below it, the box fills the line, which is as
+	// tall as the box, shorter than with the box standing.
+	if standing.Y+standing.H >= sh {
+		t.Errorf("standing box %+v in a line %v tall", standing, sh)
+	}
+	if hanging.Y > 0.5 || hanging.Y+hanging.H < hh-0.5 || hh >= sh {
+		t.Errorf("hanging box %+v in a line %v tall, %v standing", hanging, hh, sh)
+	}
+}

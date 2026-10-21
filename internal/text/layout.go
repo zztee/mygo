@@ -122,6 +122,9 @@ type Span struct {
 	// which lines break around and which draws no glyph, as an image in a
 	// rich text's line (Glyph.Object).
 	ObjectWidth, ObjectHeight float32
+	// ObjectDescent is how much of ObjectHeight hangs below the baseline,
+	// as a typeset formula's depth: the box rises ObjectHeight minus it.
+	ObjectDescent float32
 }
 
 // style returns the style of the span's runes in a text of style base.
@@ -173,6 +176,7 @@ func EncodeSpans(spans []Span) string {
 		str(sp.Features)
 		b = binary.LittleEndian.AppendUint32(b, math.Float32bits(sp.ObjectWidth))
 		b = binary.LittleEndian.AppendUint32(b, math.Float32bits(sp.ObjectHeight))
+		b = binary.LittleEndian.AppendUint32(b, math.Float32bits(sp.ObjectDescent))
 		str(sp.Lang)
 	}
 	return string(b)
@@ -224,6 +228,7 @@ func DecodeSpans(s string) []Span {
 		sp.Features = str()
 		sp.ObjectWidth = f32()
 		sp.ObjectHeight = f32()
+		sp.ObjectDescent = f32()
 		sp.Lang = str()
 		if b == nil {
 			break
@@ -1006,9 +1011,11 @@ func line(p Params, text []rune, sl shapedLine, offset int, rtl bool, m lineMetr
 				g.Runes = max(next-g.Cluster, 1)
 				if o := objectAt(spans, g.Cluster); o != nil {
 					// An inline object stands on the baseline, as high as
-					// it is, whatever font its run took.
+					// it is, hanging its descent below, whatever font its
+					// run took.
 					g.Object, g.Advance, g.ID = true, o.ObjectWidth, 0
-					line.Ascent = max(line.Ascent, o.ObjectHeight)
+					line.Ascent = max(line.Ascent, o.ObjectHeight-o.ObjectDescent)
+					line.Descent = max(line.Descent, o.ObjectDescent)
 				}
 				g.Cluster += offset
 			}

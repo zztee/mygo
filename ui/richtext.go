@@ -41,6 +41,10 @@ type Span struct {
 	// which lines break around and which draws nothing, where a rich text
 	// editor draws an image (TextLayout.Objects).
 	ObjectWidth, ObjectHeight float32
+	// ObjectDescent is how much of ObjectHeight hangs below the baseline,
+	// as a typeset formula's depth: the box rises ObjectHeight minus it,
+	// and the line makes room below for the rest.
+	ObjectDescent float32
 }
 
 // RichText creates a text whose spans differ in style, over the style of
@@ -169,7 +173,7 @@ func (sc *spanCache) update(spans []Span) {
 // layout.
 func spanStyle(s Span, end int) text.Span {
 	return text.Span{End: end, Family: s.Font, Size: s.Size, Weight: s.Weight, Italic: s.Italic, LetterSpacing: s.LetterSpacing, Features: s.Features, Lang: s.Lang,
-		ObjectWidth: s.ObjectWidth, ObjectHeight: s.ObjectHeight}
+		ObjectWidth: s.ObjectWidth, ObjectHeight: s.ObjectHeight, ObjectDescent: s.ObjectDescent}
 }
 
 // encodeSpans encodes the styles of spans for a layout.
