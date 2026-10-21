@@ -2,6 +2,8 @@ package richtext
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui/markdown/parser"
 )
@@ -189,7 +191,9 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 		case parser.Text:
 			add(n.Text, a)
 		case parser.SoftBreak:
-			add(" ", a)
+			if !wideBreak(*out, in, k+1) {
+				add(" ", a)
+			}
 		case parser.LineBreak:
 			add(string(LineBreak), a)
 		case parser.Code:
@@ -270,4 +274,30 @@ func addMDRun(runs []Run, r Run) []Run {
 		return runs
 	}
 	return append(runs, r)
+}
+
+// wideBreak reports whether a soft break, before the inline at next, is
+// between two Chinese or Japanese characters, where it is no space, as a
+// browser shows it. Korean puts spaces between words.
+func wideBreak(out []Run, in []parser.Inline, next int) bool {
+	if len(out) == 0 || out[len(out)-1].Attributes.Attachment != nil {
+		return false
+	}
+	before, _ := utf8.DecodeLastRuneInString(out[len(out)-1].Text)
+	for ; next < len(in); next++ {
+		switch in[next].Kind {
+		case parser.Text, parser.Code:
+			after, _ := utf8.DecodeRuneInString(in[next].Text)
+			return wideRune(before) && wideRune(after)
+		case parser.Emphasis, parser.Strong, parser.Strikethrough, parser.Link:
+			continue // their text comes next
+		}
+		return false
+	}
+	return false
+}
+
+func wideRune(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana) ||
+		r >= 0x3000 && r <= 0x303f || r >= 0xff00 && r <= 0xffef
 }

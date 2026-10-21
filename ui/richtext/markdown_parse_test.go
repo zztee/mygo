@@ -300,3 +300,21 @@ func TestMarkdownKeepsNestedQuotes(t *testing.T) {
 		t.Errorf("unstyled %+v", s)
 	}
 }
+
+// A soft break between Chinese or Japanese characters is no space, as
+// a browser shows it; between other words it is one.
+func TestSoftBreakBetweenWideCharacters(t *testing.T) {
+	for md, want := range map[string]string{
+		"第一行中文\n第二行中文":  "第一行中文第二行中文",
+		"日本語の\nテキスト":    "日本語のテキスト",
+		"中文，\n继续":       "中文，继续",
+		"English\nline": "English line",
+		"中文\nEnglish":   "中文 English",
+		"한국어\n문장":       "한국어 문장",
+		"**粗体**\n中文":    "粗体中文",
+	} {
+		if got := ParseMarkdown(md).String(); got != want {
+			t.Errorf("%q read as %q, want %q", md, got, want)
+		}
+	}
+}
