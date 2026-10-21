@@ -255,3 +255,32 @@ func TestListNumberFromZeroAndPerList(t *testing.T) {
 		t.Fatalf("numbers %v", got)
 	}
 }
+
+// Scroll.Dragging tells while the pointer selects, from its press on the
+// text to its release.
+func TestScrollDragging(t *testing.T) {
+	doc := NewDocument(NewText("one two three"))
+	var s Scroll
+	tt := baseTester(doc, EditorOptions{Scroll: &s})
+	if s.Dragging() {
+		t.Fatal("dragging before a press")
+	}
+	tt.Press(2, 5)
+	tt.Frame()
+	if !s.Dragging() {
+		t.Fatal("not dragging while pressed")
+	}
+	tt.Move(60, 5)
+	tt.Frame()
+	if !s.Dragging() {
+		t.Fatal("not dragging while moving pressed")
+	}
+	tt.Release(60, 5)
+	tt.Frame()
+	if s.Dragging() {
+		t.Fatal("dragging after the release")
+	}
+	if (&Scroll{}).Dragging() {
+		t.Fatal("an unbound Scroll drags")
+	}
+}

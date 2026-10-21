@@ -143,6 +143,11 @@ func (s *Scroll) TextY(i int) float32 {
 	return float32(v.hs.top(p) + float64(above))
 }
 
+// Dragging reports whether the pointer is selecting: held down since it
+// pressed the text. An app that changes the text where the caret goes
+// waits for the release, as the drag goes on from where it started.
+func (s *Scroll) Dragging() bool { return s.v != nil && s.v.dragging }
+
 // ScrollTo scrolls the content to y.
 func (s *Scroll) ScrollTo(y float32) {
 	v := s.v
