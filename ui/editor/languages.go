@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // LanguageFor returns the language of a file by its name, as
@@ -31,7 +32,8 @@ func LanguageFor(filename string) *Language {
 
 // LanguageNamed returns the language MyGo knows by a name, as "Go",
 // "TypeScript" or "tsx", ignoring case: its Name, an extension without
-// the dot, or a usual alias, as Markdown's code blocks name them.
+// the dot, or a usual alias, as Markdown's code blocks name them, or one
+// of its Aliases.
 func LanguageNamed(name string) *Language {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if name == "" {
@@ -44,6 +46,11 @@ func LanguageNamed(name string) *Language {
 		}
 		for _, e := range l.Extensions {
 			if e[1:] == name {
+				return l
+			}
+		}
+		for _, a := range l.Aliases {
+			if strings.ToLower(a) == name {
 				return l
 			}
 		}
@@ -161,15 +168,17 @@ func languageAlias(name string) string {
 	return name
 }
 
-// Languages returns the languages MyGo knows how to highlight.
+// Languages returns the languages MyGo knows how to highlight: its own,
+// then those apps add (RegisterLanguage). The list is not to be changed.
 func Languages() []*Language {
 	languagesOnce.Do(makeLanguages)
-	return languageList
+	return *languageList.Load()
 }
 
 var (
 	languagesOnce sync.Once
-	languageList  []*Language
+	languagesMu   sync.Mutex // held to add to languageList
+	languageList  atomic.Pointer[[]*Language]
 )
 
 func cAutoClose(quotes ...string) []BracketPair {
@@ -451,7 +460,8 @@ func makeLanguages() {
 	}
 	// HTML's tokenizer highlights the scripts and styles inside it.
 	html.Tokenizer = &markupLexer{html: true, script: javascript.Tokenizer, style: css.Tokenizer}
-	languageList = append([]*Language{goLang, javascript, typescript, json, python, rust, c, cpp, java, kotlin, swift, csharp,
+	list := append([]*Language{goLang, javascript, typescript, json, python, rust, c, cpp, java, kotlin, swift, csharp,
 		shell, yaml, toml, sql, ruby, lua, php, css, html, xml, markdown, diffLang, dockerfile, makefile, protobuf, zig},
 		extraLanguages()...)
+	languageList.Store(&list)
 }

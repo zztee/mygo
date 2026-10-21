@@ -82,6 +82,10 @@ type Language struct {
 	// "Makefile" (LanguageFor).
 	Extensions []string
 	Filenames  []string
+	// Aliases are other names Markdown's code blocks call it by, as
+	// "golang", which LanguageNamed knows besides its Name and
+	// extensions.
+	Aliases []string
 	// LineComment starts a comment to the end of the line, as "//";
 	// BlockComment encloses one, as {"/*", "*/"}. Toggling comments uses
 	// the first, else the second.

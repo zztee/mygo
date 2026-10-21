@@ -558,7 +558,9 @@ func (markdownLexer) Tokenize(line string, state uint64, tokens []Token) ([]Toke
 			name = name[:sp]
 		}
 		if l := LanguageNamed(name); l != nil {
-			for k, x := range Languages() {
+			// Eight bits hold the language: one of the first 255.
+			langs := Languages()
+			for k, x := range langs[:min(len(langs), 255)] {
 				if x == l {
 					next |= uint64(k+1) << 46
 				}
