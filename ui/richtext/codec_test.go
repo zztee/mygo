@@ -198,6 +198,15 @@ func TestMarkdownEscapes(t *testing.T) {
 		{NewText(`C:\Users\ike 桌面\笔记`), `C:\Users\ike 桌面\笔记`},
 		{NewText(`a\*b\ end\`), `a\\\*b\ end\\`},
 		{TextOf(para(ParagraphStyle{}, Run{Text: "x!"}, Run{Text: "y", Attributes: Attributes{Link: "http://e"}})), `x\![y](http://e)`},
+		// A ! escaped only where a [ right after it would make an image.
+		{NewText("Hello!"), `Hello!`},
+		{NewText("Hi! there! Next!"), "Hi! there!\\\nNext!"},
+		{TextOf(para(ParagraphStyle{}, Run{Text: "x! "}, Run{Text: "y", Attributes: Attributes{Link: "http://e"}})), `x! [y](http://e)`},
+		{TextOf(para(ParagraphStyle{}, Run{Text: "x!", Attributes: Attributes{Weight: 700}}, Run{Text: "y", Attributes: Attributes{Link: "http://e"}})), `**x!**[y](http://e)`},
+		{TextOf(para(ParagraphStyle{}, Run{Text: "x!"}, Run{Text: "y", Attributes: Attributes{Link: "http://e", Weight: 700}})), `x\![**y**](http://e)`},
+		{TextOf(para(ParagraphStyle{}, Run{Text: "x!"}, Run{Text: string(ObjectReplacement), Attributes: Attributes{Attachment: &Attachment{Name: "a", URL: "i.png"}}})), `x!![a](i.png)`},
+		{TextOf(para(ParagraphStyle{}, Run{Text: "x!"}, Run{Text: string(ObjectReplacement), Attributes: Attributes{Link: "http://e", Attachment: &Attachment{Name: "a", URL: "i.png"}}})), `x\![![a](i.png)](http://e)`},
+		{TextOf(para(ParagraphStyle{}, Run{Text: "x!"}, Run{Text: "[y]"})), `x!\[y\]`},
 		{TextOf(para(ParagraphStyle{}, Run{Text: "a``b", Attributes: Attributes{Code: true}})), "```a``b```"},
 		{TextOf(para(ParagraphStyle{}, Run{Text: "`x", Attributes: Attributes{Code: true}})), "`` `x ``"},
 		// Delimiters that cannot open or close where they are.

@@ -424,8 +424,8 @@ func renderRuns(runs []Run, html map[delimKey]bool) (string, []delim) {
 			if first {
 				s = escapeBlockStart(s)
 			}
-			if strings.HasSuffix(s, "!") {
-				// Not an image with a link after it.
+			if strings.HasSuffix(s, "!") && trail == "" && len(want) == 0 && linkNext(runs, i) {
+				// Not an image with the link after it.
 				s = s[:len(s)-1] + "\\!"
 			}
 			b.WriteString(s)
@@ -436,6 +436,23 @@ func renderRuns(runs []Run, html map[delimKey]bool) (string, []delim) {
 	closeTo(0)
 	b.WriteString(pending)
 	return b.String(), delims
+}
+
+// linkNext reports whether the run after runs[i], which closes no mark,
+// opens a link's [ right where runs[i] ends.
+func linkNext(runs []Run, i int) bool {
+	if i+1 >= len(runs) {
+		return false
+	}
+	r := runs[i+1]
+	if r.Attributes.Link == "" {
+		return false
+	}
+	if r.Attributes.Attachment != nil {
+		return true
+	}
+	c, _ := utf8.DecodeRuneInString(r.Text)
+	return r.Text != "" && !unicode.IsSpace(c)
 }
 
 // readsAs reports whether s reads back as runs, as far as Markdown keeps
