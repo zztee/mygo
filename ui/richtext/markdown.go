@@ -29,14 +29,14 @@ func (t Text) Markdown() string {
 	var markers []byte // the marker of each level's list, 0 for none
 	open := 0
 	quoted := false
-	prevList, prevQuote := false, false
+	prevList, prevQuote, prevDepth := false, false, 0
 	for i := 0; i < len(paras); i++ {
 		p := paras[i]
 		st := p.Style
 		under := st.List == NoList && st.Heading == 0 && st.Indent > 0 && st.Indent <= open
 		quote := ""
 		if st.Quote {
-			quote = "> "
+			quote = strings.Repeat("> ", st.QuoteDepth+1)
 		}
 		lead := quote
 		if under {
@@ -61,6 +61,10 @@ func (t Text) Markdown() string {
 				b.WriteString("\n" + strings.TrimRight(quote, " "))
 			}
 			b.WriteByte('\n')
+		case st.Quote && prevQuote && st.QuoteDepth > prevDepth:
+			// A quotation inside the one before starts after a blank
+			// line of that one.
+			b.WriteString("\n" + strings.TrimRight(strings.Repeat("> ", prevDepth+1), " ") + "\n")
 		case st.Quote && prevQuote:
 			// The blank line between paragraphs of one quotation is
 			// quoted too.
@@ -68,7 +72,7 @@ func (t Text) Markdown() string {
 		default:
 			b.WriteString("\n\n")
 		}
-		prevList, prevQuote = st.List != NoList, st.Quote
+		prevList, prevQuote, prevDepth = st.List != NoList, st.Quote, st.QuoteDepth
 		switch {
 		case st.List != NoList:
 			open, quoted = st.Indent+1, st.Quote
@@ -202,14 +206,14 @@ func plainOf(p Paragraph) string {
 // strikethrough or underline, from the outside in. Code is a span of each
 // run, fenced as its backticks need.
 type mark struct {
-	kind byte // 'a', 'b', 'i', 's', 'u'
-	url  string
+	kind       byte // 'a', 'b', 'i', 's', 'u'
+	url, title string
 }
 
 func marksOf(a Attributes) []mark {
 	var m []mark
 	if a.Link != "" {
-		m = append(m, mark{kind: 'a', url: a.Link})
+		m = append(m, mark{kind: 'a', url: a.Link, title: a.LinkTitle})
 	}
 	if a.Bold() {
 		m = append(m, mark{kind: 'b'})
@@ -256,7 +260,7 @@ func (m mark) open(html bool) string {
 func (m mark) close(html bool) string {
 	switch m.kind {
 	case 'a':
-		return "](" + markdownURL(m.url) + ")"
+		return "](" + markdownURL(m.url) + markdownTitle(m.title) + ")"
 	case 'u':
 		return "</u>"
 	}
@@ -373,7 +377,11 @@ func renderRuns(runs []Run, html map[delimKey]bool) (string, []delim) {
 			closeTo(0)
 			b.WriteString(pending)
 			pending = ""
-			b.WriteString("![" + escapeMarkdown(at.Name) + "](" + markdownURL(at.URL) + ")")
+			img := "![" + escapeMarkdown(at.Name) + "](" + markdownURL(at.URL) + markdownTitle(at.Title) + ")"
+			if l := r.Attributes.Link; l != "" {
+				img = "[" + img + "](" + markdownURL(l) + markdownTitle(r.Attributes.LinkTitle) + ")"
+			}
+			b.WriteString(img)
 			first = false
 			continue
 		}
@@ -443,16 +451,16 @@ func markKey(runs []Run) string {
 	var b strings.Builder
 	type marks struct {
 		bold, italic, strike, under, code bool
-		link                              string
+		link, title                       string
 		at                                Attachment
 	}
 	var all []rune
 	var ms []marks
 	for _, r := range runs {
 		a := r.Attributes
-		m := marks{a.Bold(), a.Italic, a.Strikethrough, a.Underline, a.Code, a.Link, Attachment{}}
+		m := marks{a.Bold(), a.Italic, a.Strikethrough, a.Underline, a.Code, a.Link, a.LinkTitle, Attachment{}}
 		if a.Attachment != nil {
-			m.at = Attachment{Name: a.Attachment.Name, URL: a.Attachment.URL}
+			m.at = Attachment{Name: a.Attachment.Name, URL: a.Attachment.URL, Title: a.Attachment.Title}
 		}
 		for _, c := range r.Text {
 			all = append(all, c)
@@ -538,6 +546,15 @@ func markdownURL(u string) string {
 		return "<" + strings.NewReplacer("<", "%3C", ">", "%3E").Replace(u) + ">"
 	}
 	return u
+}
+
+// markdownTitle returns a title as it follows the destination of a link
+// or an image, or "" for none.
+func markdownTitle(t string) string {
+	if t == "" {
+		return ""
+	}
+	return ` "` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(t) + `"`
 }
 
 // sameBlockOfCode reports whether lines of code of styles a and b, one

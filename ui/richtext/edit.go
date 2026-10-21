@@ -205,6 +205,8 @@ func unstyle(s *ParagraphStyle) {
 		s.List, s.Checked = NoList, false
 	case s.Heading > 0:
 		s.Heading = 0
+	case s.Quote && s.QuoteDepth > 0:
+		s.QuoteDepth--
 	case s.Quote:
 		s.Quote = false
 	case s.CodeBlock:
@@ -230,6 +232,8 @@ func (v *view) enter() {
 				s.Indent--
 			case s.List != NoList:
 				s.List, s.Checked = NoList, false
+			case s.Quote && s.QuoteDepth > 0:
+				s.QuoteDepth--
 			case s.Quote:
 				s.Quote = false
 			case s.CodeBlock && p > 0 && v.para(p-1).style.CodeBlock:

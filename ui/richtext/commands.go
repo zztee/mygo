@@ -199,7 +199,13 @@ func (d *Document) SetLink(url string) {
 		a, z = la, lz
 	}
 	anchor, caret := d.anchor, d.caret
-	d.edit(false, func(e *Edit) { e.Format(a, z, func(x *Attributes) { x.Link = url }) })
+	d.edit(false, func(e *Edit) {
+		e.Format(a, z, func(x *Attributes) {
+			if x.Link != url {
+				x.Link, x.LinkTitle = url, ""
+			}
+		})
+	})
 	d.anchor, d.caret = anchor, caret
 }
 
@@ -265,7 +271,7 @@ func (d *Document) ToggleQuote() {
 	d.lock()
 	defer d.mu.Unlock()
 	off := d.paragraphsAll(func(p ParagraphStyle) bool { return p.Quote })
-	d.formatParagraphs(func(p *ParagraphStyle) { p.Quote = !off })
+	d.formatParagraphs(func(p *ParagraphStyle) { p.Quote, p.QuoteDepth = !off, 0 })
 }
 
 func (d *Document) ToggleCodeBlock() {

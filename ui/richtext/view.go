@@ -588,7 +588,7 @@ func (v *view) insets(st ParagraphStyle) (left, right float32) {
 		left += look.indent
 	}
 	if st.Quote {
-		left += look.indent * 0.75
+		left += look.indent * 0.75 * float32(st.QuoteDepth+1)
 	}
 	if st.CodeBlock {
 		left += look.size * look.CodeBlockPadding[0]

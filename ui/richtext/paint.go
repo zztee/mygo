@@ -132,8 +132,11 @@ func (v *view) paintBlock(p *ui.Painter, i int, st ParagraphStyle, x, top, heigh
 		}
 	}
 	if st.Quote {
+		// A bar for each quotation it is in.
 		w := look.QuoteBarWidth
-		p.Fill(ui.Rect{X: x + indent, Y: top, W: w, H: height}, look.QuoteBar, w/2)
+		for k := range st.QuoteDepth + 1 {
+			p.Fill(ui.Rect{X: x + indent + float32(k)*look.indent*0.75, Y: top, W: w, H: height}, look.QuoteBar, w/2)
+		}
 	}
 }
 

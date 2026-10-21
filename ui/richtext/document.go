@@ -159,7 +159,7 @@ func typingAttributes(t Text, start, end int) Attributes {
 	a := before.extending()
 	// What does not extend holds inside: between two runes of a link.
 	if before.Link == after.Link {
-		a.Link = before.Link
+		a.Link, a.LinkTitle = before.Link, before.LinkTitle
 	}
 	if before.Code && after.Code {
 		a.Code = true

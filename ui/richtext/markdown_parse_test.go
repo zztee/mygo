@@ -256,3 +256,47 @@ func TestMarkdownKeepsListForms(t *testing.T) {
 		}
 	}
 }
+
+// Links and images keep their titles, and an image keeps the link
+// around it.
+func TestMarkdownKeepsTitlesAndLinkedImages(t *testing.T) {
+	for _, md := range []string{
+		`See [Example](https://example.com "Example Title").`,
+		`![a picture](assets/pic.png "Picture title")`,
+		`[![a picture](assets/pic.png)](https://example.com)`,
+		`[![p](i.png "t")](https://x.org "u")`,
+		`[a](https://x.org "say \"hi\"")`,
+	} {
+		if got := ParseMarkdown(md).Markdown(); got != md {
+			t.Errorf("%q came back\n%q", md, got)
+		}
+	}
+	// A title goes with its link: typing after it, or another address,
+	// leaves it behind.
+	d := NewDocument(ParseMarkdown(`[a](https://x.org "t")`))
+	d.SetSelection(0, 1)
+	d.SetLink("https://y.org")
+	if got := d.Text().Markdown(); got != "[a](https://y.org)" {
+		t.Errorf("relinked %q", got)
+	}
+}
+
+// A quotation inside a quotation stays inside it.
+func TestMarkdownKeepsNestedQuotes(t *testing.T) {
+	for _, md := range []string{
+		"> Outer\n>\n> > Inner",
+		"> a\n>\n> > b\n>\n> c",
+		"> > only deep",
+		"> one\n>\n> > two\n> >\n> > > three",
+	} {
+		if got := ParseMarkdown(md).Markdown(); got != md {
+			t.Errorf("%q came back\n%q", md, got)
+		}
+	}
+	// Taking the style off a nested quotation's paragraph takes one level.
+	s := ParagraphStyle{Quote: true, QuoteDepth: 1}
+	unstyle(&s)
+	if !s.Quote || s.QuoteDepth != 0 {
+		t.Errorf("unstyled %+v", s)
+	}
+}

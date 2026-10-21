@@ -52,6 +52,9 @@ type Attributes struct {
 	// Link is a URL the run links to. Typing at its edges does not
 	// continue it, as in NSTextView.
 	Link string
+	// LinkTitle is the title of Link, which Markdown writes after its
+	// address. It goes with the link.
+	LinkTitle string
 	// Tag is the app's own mark over the run, as a mention or a comment's
 	// ID: typing at its edges does not continue it, and the app styles it
 	// with EditorOptions.TagStyle.
@@ -70,7 +73,7 @@ func (a Attributes) Bold() bool { return a.Weight >= 600 }
 // NSTextView and the expand rules of Peritext and Loro leave them; every
 // other attribute carries on to what is typed after it.
 func (a Attributes) extending() Attributes {
-	a.Link, a.Code, a.Tag, a.Attachment = "", false, "", nil
+	a.Link, a.LinkTitle, a.Code, a.Tag, a.Attachment = "", "", false, "", nil
 	return a
 }
 
@@ -90,6 +93,8 @@ type Attachment struct {
 	// URL is where the attachment comes from, as a file's or an image's,
 	// which HTML and Markdown write for it.
 	URL string
+	// Title is an image's title, which Markdown writes after its URL.
+	Title string
 	// Draw draws the attachment in r, instead of Image, as an app's chip
 	// for a mention or a file.
 	Draw func(p *ui.Painter, r ui.Rect)
@@ -202,6 +207,10 @@ func (s ParagraphStyle) normalized() ParagraphStyle {
 	if s.List == NoList {
 		s.Start, s.Marker, s.Loose = 0, 0, false
 	}
+	if !s.Quote {
+		s.QuoteDepth = 0
+	}
+	s.QuoteDepth = max(0, min(s.QuoteDepth, maxIndent))
 	if s.Start < StartZero {
 		s.Start = 0
 	}
@@ -242,6 +251,9 @@ type ParagraphStyle struct {
 	// the monospaced font, its spaces kept.
 	Quote     bool `json:"quote,omitempty"`
 	CodeBlock bool `json:"codeBlock,omitempty"`
+	// QuoteDepth is how many quotations a Quote paragraph is in besides
+	// its own: 1 for a quotation inside another.
+	QuoteDepth int `json:"quoteDepth,omitempty"`
 	// Language is the language a block of code was given, as "go": its
 	// fence's info, and how it is colored. Lines next to each other make
 	// one block only when they have the same.

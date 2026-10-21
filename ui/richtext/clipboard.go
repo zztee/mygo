@@ -52,12 +52,14 @@ type clipAttributes struct {
 	Background    string  `json:"background,omitempty"`
 	Code          bool    `json:"code,omitempty"`
 	Link          string  `json:"link,omitempty"`
+	LinkTitle     string  `json:"linkTitle,omitempty"`
 	Tag           string  `json:"tag,omitempty"`
 }
 
 type clipAttachment struct {
 	Name   string  `json:"name,omitempty"`
 	URL    string  `json:"url,omitempty"`
+	Title  string  `json:"title,omitempty"`
 	Width  float32 `json:"width,omitempty"`
 	Height float32 `json:"height,omitempty"`
 }
@@ -111,7 +113,7 @@ func clipOf(t Text) clipText {
 			a := r.Attributes
 			cr := clipRun{Text: r.Text, Attributes: clipAttributes{
 				Font: a.Font, Size: a.Size, Weight: a.Weight, Italic: a.Italic, Underline: a.Underline,
-				Strikethrough: a.Strikethrough, Code: a.Code, Link: a.Link, Tag: a.Tag,
+				Strikethrough: a.Strikethrough, Code: a.Code, Link: a.Link, LinkTitle: a.LinkTitle, Tag: a.Tag,
 			}}
 			if a.Color.A > 0 {
 				cr.Attributes.Color = cssColor(a.Color)
@@ -121,7 +123,7 @@ func clipOf(t Text) clipText {
 			}
 			if at := a.Attachment; at != nil {
 				w, h := at.size()
-				cr.Attachment = &clipAttachment{Name: at.Name, URL: at.URL, Width: w, Height: h}
+				cr.Attachment = &clipAttachment{Name: at.Name, URL: at.URL, Title: at.Title, Width: w, Height: h}
 			}
 			cp.Runs = append(cp.Runs, cr)
 		}
@@ -158,10 +160,13 @@ func (c clipText) text() Text {
 				Underline: cr.Attributes.Underline, Strikethrough: cr.Attributes.Strikethrough, Code: cr.Attributes.Code,
 				Link: safeLink(cr.Attributes.Link), Tag: cr.Attributes.Tag,
 			}
+			if a.Link != "" {
+				a.LinkTitle = cr.Attributes.LinkTitle
+			}
 			a.Color, _ = parseCSSColor(cr.Attributes.Color)
 			a.Background, _ = parseCSSColor(cr.Attributes.Background)
 			if at := cr.Attachment; at != nil {
-				a.Attachment = &Attachment{Name: at.Name, URL: at.URL, Width: side(at.Width), Height: side(at.Height)}
+				a.Attachment = &Attachment{Name: at.Name, URL: at.URL, Title: at.Title, Width: side(at.Width), Height: side(at.Height)}
 			}
 			p.Runs = append(p.Runs, Run{Text: cr.Text, Attributes: a})
 		}
