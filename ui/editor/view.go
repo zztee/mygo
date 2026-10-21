@@ -641,7 +641,8 @@ func (v *view) piece(l *lineLayout, p *rowPiece) *text.Layout {
 // wrapBreaks returns where the displayed text s breaks into rows when
 // wrapping, as Zed's LineWrapper: summing the advances of characters,
 // breaking after whitespace or between a word and what is not, anywhere
-// in CJK, and inside a word too long for a row.
+// in CJK but next to the punctuation kinsoku keeps (canBreak), and inside
+// a word too long for a row.
 func (v *view) wrapBreaks(s string) []int {
 	if !v.wrap || v.wrapWidth <= 0 {
 		return nil
@@ -693,14 +694,68 @@ func (v *view) wrapIndent(s string) float32 {
 	return min(w, v.wrapWidth/2)
 }
 
+// canBreak reports whether a row may break between prev and r. As JIS X
+// 4051's line breaking rules (kinsoku) and UAX #14 have it, a row never
+// starts with closing punctuation, as 。 or 」, nor ends with opening
+// punctuation, as 「, even at a space; next to CJK, half-width punctuation
+// keeps those rules too.
 func canBreak(prev, r rune) bool {
+	if kinsokuOf(r)&noRowStart != 0 || kinsokuOf(prev)&noRowEnd != 0 {
+		return false
+	}
 	if prev == ' ' || prev == '\t' {
 		return r != ' ' && r != '\t'
 	}
 	if isCJK(r) || isCJK(prev) {
-		return true
+		if r < utf8.RuneSelf && strings.IndexByte(".,;:?!)]}", byte(r)) >= 0 {
+			return false
+		}
+		return prev != '(' && prev != '[' && prev != '{'
 	}
 	return isWordRune(prev) != isWordRune(r) && r != ' ' && r != '\t' && !strings.ContainsRune(".,;:)]}>'\"", r)
+}
+
+// The rules of kinsoku for a character: noRowStart for closing brackets
+// and quotes, the marks that end and divide sentences, ellipses, hyphens,
+// iteration and prolonged sound marks, and small kana; noRowEnd for
+// opening brackets and quotes.
+const (
+	noRowStart = 1 << iota
+	noRowEnd
+)
+
+// kinsoku holds the rules of the characters from U+2010 to U+31FF, of
+// General Punctuation, CJK Symbols and Punctuation and kana, then of those
+// from U+FF00 to U+FF9F, of Halfwidth and Fullwidth Forms.
+var kinsoku = func() (t [0x3200 - 0x2010 + 0xa0]uint8) {
+	set := func(chars string, rule uint8) {
+		for _, r := range chars {
+			t[kinsokuIndex(r)] |= rule
+		}
+	}
+	set("）〕］｝〉》」』】〙〗〞〟｠｣’”、。，．：；？！｡､‼⁇⁈⁉…‥・･‐–゠〜～ーｰヽヾゝゞ々〻゛゜ﾞﾟ"+
+		"ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿｧｨｩｪｫｬｭｮｯ", noRowStart)
+	set("（〔［｛〈《「『【〘〖〝｟｢‘“", noRowEnd)
+	return t
+}()
+
+// kinsokuIndex returns the index of r in kinsoku, -1 when it is not there.
+func kinsokuIndex(r rune) int {
+	switch {
+	case r >= 0x2010 && r < 0x3200:
+		return int(r - 0x2010)
+	case r >= 0xff00 && r < 0xffa0:
+		return int(r-0xff00) + 0x3200 - 0x2010
+	}
+	return -1
+}
+
+// kinsokuOf returns the rules of kinsoku for r.
+func kinsokuOf(r rune) uint8 {
+	if i := kinsokuIndex(r); i >= 0 {
+		return kinsoku[i]
+	}
+	return 0
 }
 
 func isCJK(r rune) bool {
