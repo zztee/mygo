@@ -206,6 +206,38 @@ func TestListNumberPastBlocksUnderItem(t *testing.T) {
 	}
 }
 
+// A numbered task shows its number before its check box, which takes the
+// room of a level more; the paragraphs under it line up with the box, as
+// GitHub shows them. A bullet task shows its box alone.
+func TestNumberedTaskMarker(t *testing.T) {
+	doc := NewDocument(ParseMarkdown("1. [ ] one\n2. [x] two\n\n    under\n\n- [ ] bullet"))
+	var s Scroll
+	baseTester(doc, EditorOptions{Scroll: &s})
+	v := s.v
+	var marks []string
+	for p := range v.paras {
+		marks = append(marks, v.marker(p, v.para(p).style))
+	}
+	if fmt.Sprint(marks) != "[1. 2.  ]" {
+		t.Fatalf("markers %q", marks)
+	}
+	task, _ := v.insets(v.para(0).style)
+	under, _ := v.insets(v.para(2).style)
+	bullet, _ := v.insets(v.para(3).style)
+	if !near(task, 2*v.look.indent) || !near(bullet, v.look.indent) || !near(under, v.look.indent) {
+		t.Fatalf("insets: numbered task %v, under it %v, bullet task %v (indent %v)", task, under, bullet, v.look.indent)
+	}
+	// The box toggles the task; the number beside it does not.
+	_, top, h := v.caretAt(0, 0, ui.TextDownstream)
+	y := top + float64(h)/2
+	if p, on := v.taskBox(task-v.look.indent/2, y); p != 0 || !on {
+		t.Fatalf("box of the numbered task: %d %v", p, on)
+	}
+	if _, on := v.taskBox(v.look.indent/2, y); on {
+		t.Fatal("the number toggles the task")
+	}
+}
+
 // A list counted from 0 shows 0, and a list after one with another
 // delimiter counts again.
 func TestListNumberFromZeroAndPerList(t *testing.T) {

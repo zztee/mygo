@@ -161,7 +161,12 @@ func (v *view) paintMarker(p *ui.Painter, i int, st ParagraphStyle, pv *paraView
 		} else {
 			p.Stroke(ui.Rect{X: bx, Y: by, W: box, H: box}, look.Muted, box*0.25, 1.25)
 		}
-		return
+		if !st.numbered() {
+			return
+		}
+		// The number goes before the box, as before a numbered item's
+		// text.
+		x -= look.indent
 	}
 	mark := v.marker(i, st)
 	if pv.markerLayout == nil || pv.marker != mark {
@@ -216,12 +221,16 @@ func (v *view) listNumber(p int) int {
 }
 
 // marker returns what marks item p of a list: a bullet for its level, or
-// its number, in digits, letters or Roman numerals by level.
+// its number, in digits, letters or Roman numerals by level. A task's box
+// is drawn: only a numbered task has a marker too, its number.
 func (v *view) marker(p int, st ParagraphStyle) string {
 	switch st.List {
 	case Bullets:
 		return []string{"•", "◦", "▪"}[st.Indent%3]
-	case Numbers:
+	case Numbers, Tasks:
+		if !st.numbered() {
+			return ""
+		}
 		n := v.listNumber(p)
 		switch st.Indent % 3 {
 		case 1:

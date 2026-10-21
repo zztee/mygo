@@ -592,6 +592,10 @@ func (v *view) insets(st ParagraphStyle) (left, right float32) {
 	if st.List != NoList {
 		left += look.indent
 	}
+	if st.List == Tasks && st.numbered() {
+		// Its number, then its box in the room of a level more.
+		left += look.indent
+	}
 	if st.Quote {
 		left += look.indent * 0.75 * float32(st.QuoteDepth+1)
 	}
