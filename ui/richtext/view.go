@@ -120,6 +120,44 @@ func (s *Scroll) ScrollTo(y float32) {
 	v.setScroll(max(0, min(float64(y), v.hs.top(len(v.paras))-float64(v.viewH))))
 }
 
+// CaretLine returns the caret's top and height in the content.
+func (s *Scroll) CaretLine() (y, h float32, ok bool) {
+	v := s.v
+	if v == nil || len(v.paras) == 0 {
+		return 0, 0, false
+	}
+	_, top, lh := v.caretAt(v.caret, v.composeCaret, v.affinity)
+	if lh <= 0 {
+		return 0, 0, false
+	}
+	return float32(top), lh, true
+}
+
+// IndexAt returns the rune nearest (x, y) in the editor's own coordinates,
+// the same space its pointer events use.
+func (s *Scroll) IndexAt(x, y float32) (int, bool) {
+	v := s.v
+	if v == nil || len(v.paras) == 0 {
+		return 0, false
+	}
+	cx, cy := v.contentPoint(x, y)
+	i, _ := v.positionAt(cx, cy)
+	if i < 0 {
+		return 0, false
+	}
+	return i, true
+}
+
+// ParaTop returns the top of the paragraph holding rune i, in the editor
+// element, so a hint can sit beside that line.
+func (s *Scroll) ParaTop(i int) float32 {
+	v := s.v
+	if v == nil || len(v.paras) == 0 {
+		return 0
+	}
+	return s.TextY(i) - float32(v.scroll) + v.padY
+}
+
 // ScrollToText scrolls the text of the paragraph holding rune i to margin
 // DIPs below the top.
 func (s *Scroll) ScrollToText(i int, margin float32) {
