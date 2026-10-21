@@ -195,10 +195,11 @@ func (v *view) listNumber(p int) int {
 	n := 1
 	for q := p - 1; q >= 0; q-- {
 		qs := v.para(q).style
-		if qs.List == NoList || qs.Indent < st.Indent {
+		if qs.Indent < st.Indent || qs.List == NoList && (qs.Heading > 0 || qs.Indent == st.Indent) {
 			break
 		}
 		if qs.Indent > st.Indent {
+			// A deeper item, or what an item of this level holds.
 			continue
 		}
 		if qs.List == Numbers {

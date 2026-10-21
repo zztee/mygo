@@ -838,7 +838,8 @@ func (s *System) layout(p Params) *cached {
 	y := float32(0)
 	for start := 0; start <= len(runes); {
 		end := start
-		for end < len(runes) && runes[end] != '\n' {
+		// A line separator, U+2028, breaks the line as a newline does.
+		for end < len(runes) && runes[end] != '\n' && runes[end] != '\u2028' {
 			end++
 		}
 		maxLines := 0

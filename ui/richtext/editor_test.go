@@ -501,7 +501,7 @@ func TestCodeBlockLanguageRoundTrip(t *testing.T) {
 	for _, md := range []string{
 		"```go\na := 1\n\nb := 2\n```",
 		"```go\nx\n```\n\n```py\ny\n```",
-		"> ```sh\n> ls\n> \n> pwd\n> ```",
+		"> ```sh\n> ls\n>\n> pwd\n> ```",
 	} {
 		if got := ParseMarkdown(md).Markdown(); got != md {
 			t.Errorf("%q came back %q", md, got)
@@ -615,5 +615,24 @@ func TestRichTextLinkOpensSafely(t *testing.T) {
 	got := tt.OpenedURLs()
 	if len(got) == 0 || slices.ContainsFunc(got, func(u string) bool { return u != "https://example.com" }) {
 		t.Errorf("opened %q", got)
+	}
+}
+
+// Shift-Enter breaks the line within the paragraph, which Markdown keeps
+// as a hard line break; in code it is Enter.
+func TestShiftEnterBreaksLine(t *testing.T) {
+	doc := NewDocument(Text{})
+	tt, _ := richTester(t, doc)
+	typeRunes(tt, "one")
+	tt.Key(ui.Shift, ui.KeyEnter)
+	typeRunes(tt, "two")
+	if n := doc.Text().ParagraphCount(); n != 1 {
+		t.Fatalf("%d paragraphs", n)
+	}
+	if got := doc.Text().Markdown(); got != "one\\\ntwo" {
+		t.Fatalf("markdown %q", got)
+	}
+	if got := doc.Text().PlainText(); got != "one\ntwo" {
+		t.Fatalf("plain %q", got)
 	}
 }

@@ -59,8 +59,9 @@ func TestParseMarkdown(t *testing.T) {
 			para(ParagraphStyle{List: Tasks, Checked: true, Quote: true}, Run{Text: "done"}),
 			para(ParagraphStyle{List: Bullets, Indent: 1, Quote: true}, Run{Text: "nested"}),
 		)},
-		{"a  \nb", TextOf(para(ParagraphStyle{}, Run{Text: "a"}), para(ParagraphStyle{}, Run{Text: "b"}))},
-		{"1. a\\\n   b", TextOf(para(ParagraphStyle{List: Numbers}, Run{Text: "a"}), para(ParagraphStyle{Indent: 1}, Run{Text: "b"}))},
+		{"a  \nb", TextOf(para(ParagraphStyle{}, Run{Text: "a\u2028b"}))},
+		{"1. a\\\n   b", TextOf(para(ParagraphStyle{List: Numbers}, Run{Text: "a\u2028b"}))},
+		{"a<br>b", TextOf(para(ParagraphStyle{}, Run{Text: "a\u2028b"}))},
 		{"| a | b |\n|---|---|\n| 1 | **2** |", TextOf(
 			para(ParagraphStyle{}, Run{Text: "a\tb", Attributes: bold}),
 			para(ParagraphStyle{}, Run{Text: "1\t"}, Run{Text: "2", Attributes: bold}),
@@ -200,5 +201,34 @@ func TestPasteFromMarkdownView(t *testing.T) {
 		if dump(doc.Text()) != dump(want) {
 			t.Errorf("pasted from %s %q:\n%s\nwant\n%s", only, b, dump(doc.Text()), dump(want))
 		}
+	}
+}
+
+// What a list's item, a quotation and a paragraph hold comes back as it
+// was: hard line breaks, paragraphs and code under an item, numbering on
+// past them, and a quotation's paragraphs in one quotation.
+func TestMarkdownKeepsBlockShapes(t *testing.T) {
+	for _, md := range []string{
+		"a\\\nb",
+		"- one\\\n  two\n- three",
+		"1. one\\\n   two",
+		"- [ ] task\\\n  more",
+		"> quoted\\\n> on",
+		"1. first\n\n    more of it\n\n2. second",
+		"- item\n\n    ```go\n    x := 1\n\n    y := 2\n    ```\n\n- next",
+		"> one\n>\n> two",
+		"- item\n\n    > quoted\n    >\n    > more\n\n- next",
+		"> - item\n>\n>     more",
+		"- a\n    - b\n\n        under b\n\n    - c",
+		"# Title<br>more",
+		"line\\\n\\# not a heading",
+	} {
+		if got := ParseMarkdown(md).Markdown(); got != md {
+			t.Errorf("%q came back\n%q", md, got)
+		}
+	}
+	// A break at the end of a paragraph is HTML's, which Markdown keeps.
+	if got := TextOf(Paragraph{Runs: []Run{{Text: "end "}}}).Markdown(); got != "end<br>" {
+		t.Errorf("trailing break: %q", got)
 	}
 }

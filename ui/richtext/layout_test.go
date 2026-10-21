@@ -1,6 +1,7 @@
 package richtext
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -155,5 +156,52 @@ func TestRichTextScrollKeepsPlaceAcrossWidths(t *testing.T) {
 	tt.Advance(100 * time.Millisecond)
 	if !near(s.Offset(), s.TextY(at)) {
 		t.Fatalf("offset %v, not the top of paragraph 30 at %v", s.Offset(), s.TextY(at))
+	}
+}
+
+// A line break starts a line: the caret after it is a line down, at the
+// paragraph's left edge, and Up takes it back to the line above.
+func TestLineBreakLaysOutALine(t *testing.T) {
+	doc := NewDocument(TextOf(Paragraph{Runs: []Run{{Text: "first second"}}}))
+	var s Scroll
+	doc.SetSelection(0, 0)
+	tt := baseTester(doc, EditorOptions{Scroll: &s})
+	y0, h, ok := s.CaretLine()
+	if !ok {
+		t.Fatal("no caret")
+	}
+	doc.SetSelection(6, 6)
+	tt.Frame()
+	y1, _, _ := s.CaretLine()
+	if y1 < y0+h*0.9 {
+		t.Fatalf("caret after the break at %v, first line at %v (height %v)", y1, y0, h)
+	}
+	tt.Press(2, 5)
+	tt.Release(2, 5)
+	tt.Key(0, ui.KeyDown)
+	if _, z := doc.Selection(); z < 6 {
+		t.Fatalf("Down went to %d", z)
+	}
+	tt.Key(0, ui.KeyUp)
+	if _, z := doc.Selection(); z > 5 {
+		t.Fatalf("Up went to %d", z)
+	}
+}
+
+// An item's number counts on past the paragraphs and code under the item
+// before it.
+func TestListNumberPastBlocksUnderItem(t *testing.T) {
+	doc := NewDocument(ParseMarkdown("1. one\n\n    more\n\n    ```\n    x\n    ```\n\n2. two\n\npara\n\n1. again"))
+	var s Scroll
+	baseTester(doc, EditorOptions{Scroll: &s})
+	v := s.v
+	got := []int{}
+	for p := range v.paras {
+		if v.para(p).style.List == Numbers {
+			got = append(got, v.listNumber(p))
+		}
+	}
+	if fmt.Sprint(got) != "[1 2 1]" {
+		t.Fatalf("numbers %v", got)
 	}
 }

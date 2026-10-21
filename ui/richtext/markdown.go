@@ -20,24 +20,52 @@ func (t Text) Markdown() string {
 	for _, p := range t.Paragraphs() {
 		paras = append(paras, p)
 	}
-	// numbers counts the items of the numbered lists open, by level.
+	// numbers counts the items of the numbered lists open, by level, and
+	// open is how many levels of list are open: a body paragraph or a
+	// block of code indented up to it goes on the item above it.
+	// quoted tells a list in a quotation, whose items' paragraphs are
+	// quoted outside their indent rather than quotations in the item.
 	var numbers []int
-	prevList := false
+	open := 0
+	quoted := false
+	prevList, prevQuote := false, false
 	for i := 0; i < len(paras); i++ {
 		p := paras[i]
 		st := p.Style
-		if i > 0 && !(st.List != NoList && prevList) {
-			b.WriteString("\n\n")
-		} else if i > 0 {
-			b.WriteByte('\n')
-		}
-		prevList = st.List != NoList
-		if st.List == NoList {
-			numbers = numbers[:0]
-		}
+		under := st.List == NoList && st.Heading == 0 && st.Indent > 0 && st.Indent <= open
 		quote := ""
 		if st.Quote {
 			quote = "> "
+		}
+		lead := quote
+		if under {
+			if quoted {
+				lead = quote + strings.Repeat("    ", st.Indent)
+			} else {
+				lead = strings.Repeat("    ", st.Indent) + quote
+			}
+		}
+		switch {
+		case i == 0:
+		case st.List != NoList && prevList:
+			b.WriteByte('\n')
+		case st.Quote && prevQuote:
+			// The blank line between paragraphs of one quotation is
+			// quoted too.
+			b.WriteString("\n" + strings.TrimRight(lead, " ") + "\n")
+		default:
+			b.WriteString("\n\n")
+		}
+		prevList, prevQuote = st.List != NoList, st.Quote
+		switch {
+		case st.List != NoList:
+			open, quoted = st.Indent+1, st.Quote
+		case under:
+			open = st.Indent
+			numbers = numbers[:min(len(numbers), st.Indent)]
+		default:
+			open = 0
+			numbers = numbers[:0]
 		}
 		switch {
 		case st.CodeBlock:
@@ -51,22 +79,36 @@ func (t Text) Markdown() string {
 					fence += "`"
 				}
 			}
-			b.WriteString(quote + fence + st.Language + "\n")
+			b.WriteString(lead + fence + st.Language + "\n")
 			for ; i < end; i++ {
-				b.WriteString(quote + plainOf(paras[i]) + "\n")
+				if line := plainOf(paras[i]); line != "" {
+					b.WriteString(lead + line + "\n")
+				} else {
+					b.WriteString(strings.TrimRight(lead, " ") + "\n")
+				}
 			}
 			i--
-			b.WriteString(quote + fence)
+			b.WriteString(lead + fence)
 			continue
 		case st.Heading > 0:
 			b.WriteString(quote + strings.Repeat("#", min(st.Heading, 6)) + " ")
+			// A heading's closing #s are not its text: escape them. It
+			// has no lines of its own but HTML's.
+			var h strings.Builder
+			writeMarkdownRuns(&h, p.Runs)
+			s := strings.ReplaceAll(h.String(), string(LineBreak), "<br>")
+			if k := len(strings.TrimRight(s, "#")); k < len(s) {
+				s = s[:k] + "\\" + s[k:]
+			}
+			b.WriteString(s)
+			continue
 		case st.List != NoList:
 			level := st.Indent
 			for len(numbers) <= level {
 				numbers = append(numbers, 0)
 			}
 			numbers = numbers[:level+1]
-			b.WriteString(quote + strings.Repeat("    ", level))
+			marker := "- "
 			switch st.List {
 			case Numbers:
 				if st.Start > 1 {
@@ -76,35 +118,59 @@ func (t Text) Markdown() string {
 				} else {
 					numbers[level]++
 				}
-				b.WriteString(strconv.Itoa(numbers[level]) + ". ")
+				marker = strconv.Itoa(numbers[level]) + ". "
 			case Tasks:
 				if st.Checked {
-					b.WriteString("- [x] ")
+					marker = "- [x] "
 				} else {
-					b.WriteString("- [ ] ")
+					marker = "- [ ] "
 				}
 				numbers[level] = 0
 			default:
-				b.WriteString("- ")
 				numbers[level] = 0
 			}
-		default:
-			b.WriteString(quote)
-		}
-		if st.Heading > 0 {
-			// A heading's closing #s are not its text: escape them.
-			var h strings.Builder
-			writeMarkdownRuns(&h, p.Runs)
-			s := h.String()
-			if k := len(strings.TrimRight(s, "#")); k < len(s) {
-				s = s[:k] + "\\" + s[k:]
+			lead = quote + strings.Repeat("    ", level)
+			b.WriteString(lead + marker)
+			// Lines after a break line up with the item's text.
+			lead += strings.Repeat(" ", len(marker))
+			if st.List == Tasks {
+				lead = lead[:len(lead)-4]
 			}
-			b.WriteString(s)
-			continue
+		default:
+			b.WriteString(lead)
 		}
-		writeMarkdownRuns(&b, p.Runs)
+		var r strings.Builder
+		writeMarkdownRuns(&r, p.Runs)
+		b.WriteString(breakLines(r.String(), lead))
 	}
 	return b.String()
+}
+
+// breakLines writes each LineBreak of s, Markdown of a paragraph's runs,
+// as a hard line break, the next line starting with lead and read as text,
+// not as a block. One that ends the paragraph, which Markdown drops, is
+// HTML's.
+func breakLines(s, lead string) string {
+	if !strings.ContainsRune(s, LineBreak) {
+		return s
+	}
+	var b strings.Builder
+	for {
+		line, rest, ok := strings.Cut(s, string(LineBreak))
+		b.WriteString(line)
+		if !ok {
+			return b.String()
+		}
+		if strings.TrimSpace(rest) == "" && !strings.ContainsRune(rest, LineBreak) {
+			b.WriteString("<br>")
+			return b.String()
+		}
+		b.WriteString("\\\n" + lead)
+		// Spaces at the start of a line are not its text.
+		at := len(rest) - len(strings.TrimLeft(rest, " \t"))
+		b.WriteString(strings.NewReplacer(" ", "&#32;", "\t", "&#9;").Replace(rest[:at]))
+		s = escapeBlockStart(rest[at:])
+	}
 }
 
 // plainOf returns the text of a paragraph.
@@ -320,7 +386,8 @@ func renderRuns(runs []Run, html map[delimKey]bool) (string, []delim) {
 			b.WriteString(m.open(html[key]))
 		}
 		if r.Attributes.Code {
-			b.WriteString(codeSpan(core))
+			// A span of code has no lines.
+			b.WriteString(codeSpan(strings.ReplaceAll(core, string(LineBreak), " ")))
 		} else {
 			s := escapeMarkdown(core)
 			if first {

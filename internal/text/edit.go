@@ -300,10 +300,10 @@ func (b *Boundaries) WordAt(i int) (start, end int) {
 	i = min(i, n-1)
 	word := isWordRune(b.runes[i])
 	start, end = i, i
-	for start > 0 && isWordRune(b.runes[start-1]) == word && b.runes[start-1] != '\n' {
+	for start > 0 && isWordRune(b.runes[start-1]) == word && b.runes[start-1] != '\n' && b.runes[start-1] != '\u2028' {
 		start--
 	}
-	for end < n && isWordRune(b.runes[end]) == word && b.runes[end] != '\n' {
+	for end < n && isWordRune(b.runes[end]) == word && b.runes[end] != '\n' && b.runes[end] != '\u2028' {
 		end++
 	}
 	return start, end

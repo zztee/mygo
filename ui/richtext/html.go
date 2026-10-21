@@ -243,7 +243,7 @@ func writeRun(b *strings.Builder, r Run) {
 	for _, t := range tags {
 		b.WriteString("<" + t + ">")
 	}
-	b.WriteString(html.EscapeString(r.Text))
+	b.WriteString(strings.ReplaceAll(html.EscapeString(r.Text), string(LineBreak), "<br>"))
 	for k := len(tags) - 1; k >= 0; k-- {
 		b.WriteString("</" + tags[k] + ">")
 	}

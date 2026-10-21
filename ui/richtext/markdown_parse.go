@@ -144,34 +144,13 @@ func (m *mdReader) item(i int, ist ParagraphStyle, depth int) {
 	}
 }
 
-// inlinePara adds a paragraph of inlines in style st; a hard line break
-// starts another, indented under a list item rather than an item of its
-// own.
+// inlinePara adds a paragraph of inlines in style st.
 func (m *mdReader) inlinePara(st ParagraphStyle, in []parser.Inline, a Attributes) {
-	runs := m.runs(in, a)
-	p := Paragraph{Style: st}
-	for _, r := range runs {
-		for {
-			line, rest, br := strings.Cut(r.Text, "\n")
-			if line != "" {
-				p.Runs = append(p.Runs, Run{Text: line, Attributes: r.Attributes})
-			}
-			if !br {
-				break
-			}
-			m.paras = append(m.paras, p)
-			if st.List != NoList {
-				st = ParagraphStyle{Indent: st.Indent + 1, Quote: st.Quote}
-			}
-			p = Paragraph{Style: st}
-			r.Text = rest
-		}
-	}
-	m.paras = append(m.paras, p)
+	m.paras = append(m.paras, Paragraph{Style: st, Runs: m.runs(in, a)})
 }
 
 // runs returns the runs of inlines, in attributes a; hard line breaks
-// are newlines.
+// are LineBreak.
 func (m *mdReader) runs(in []parser.Inline, a Attributes) []Run {
 	var out []Run
 	m.html = [4]int{}
@@ -204,7 +183,7 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 		case parser.SoftBreak:
 			add(" ", a)
 		case parser.LineBreak:
-			add("\n", a)
+			add(string(LineBreak), a)
 		case parser.Code:
 			x.Code = true
 			add(n.Text, x)
@@ -248,7 +227,7 @@ func (m *mdReader) tag(s string, out *[]Run, a Attributes) {
 	which := -1
 	switch name {
 	case "br":
-		*out = append(*out, Run{Text: "\n", Attributes: a})
+		*out = append(*out, Run{Text: string(LineBreak), Attributes: a})
 		return
 	case "u", "ins":
 		which = 0

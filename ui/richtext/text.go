@@ -129,6 +129,10 @@ func imageSize(src ui.ImageSource) (float32, float32) {
 // ObjectReplacement is the character an Attachment takes in a text.
 const ObjectReplacement = '￼'
 
+// LineBreak, U+2028, breaks a line within a paragraph: Markdown's hard
+// line break, which Shift-Enter types.
+const LineBreak = '\u2028'
+
 // ListKind is what a paragraph is an item of.
 type ListKind uint8
 

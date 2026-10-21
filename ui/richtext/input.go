@@ -405,6 +405,11 @@ func (v *view) key(key ui.Key, mods ui.Modifiers) bool {
 		if m != 0 {
 			return false
 		}
+		if shift && !st.CodeBlock && !v.opts.NoMarkdown {
+			// A line of its own within the paragraph.
+			v.insert(string(LineBreak))
+			return true
+		}
 		v.enter()
 		return true
 	case ui.KeyTab:

@@ -173,9 +173,10 @@ func (c clipText) text() Text {
 	return TextOf(paras...)
 }
 
-// PlainText returns t as plain text, its attachments left out.
+// PlainText returns t as plain text, its attachments left out and its
+// line breaks newlines.
 func (t Text) PlainText() string {
-	return strings.ReplaceAll(t.String(), string(ObjectReplacement), "")
+	return strings.NewReplacer(string(ObjectReplacement), "", string(LineBreak), "\n").Replace(t.String())
 }
 
 // clipboardData returns t as the clipboard takes it: in the format of
