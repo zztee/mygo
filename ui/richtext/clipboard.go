@@ -249,6 +249,9 @@ func (v *view) paste(matchStyle bool) {
 		}
 		return
 	}
+	if v.opts.OnPaste != nil {
+		t = v.opts.OnPaste(t)
+	}
 	v.record(false)
 	d := v.doc
 	d.lock()

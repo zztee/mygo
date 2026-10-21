@@ -136,6 +136,45 @@ func TestCopyPaste(t *testing.T) {
 	}
 }
 
+// OnPaste changes what a paste inserts, as an app leaves out what its
+// files cannot keep: here the alignment HTML brings.
+func TestOnPaste(t *testing.T) {
+	doc := NewDocument(NewText("x"))
+	var seen Text
+	tt := ui.NewTester(func(c *ui.Context) {
+		EditorBase(c, doc, EditorOptions{OnPaste: func(t Text) Text {
+			seen = t
+			var ps []Paragraph
+			for _, p := range t.Paragraphs() {
+				p.Style.Align = ui.Start
+				ps = append(ps, p)
+			}
+			return TextOf(ps...)
+		}}).Fill()
+	}, 500, 400)
+	tt.Press(250, 380)
+	tt.Release(250, 380)
+	tt.SetClipboardData(transfer.New(transfer.NewItem(transfer.Bytes(transfer.HTML, []byte(`<p style="text-align:center">mid</p><p align="right"><b>end</b></p>`)))))
+	doc.SetSelection(0, 0)
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyV)
+	if seen.ParagraphStyleAt(0).Align != ui.Center {
+		t.Fatalf("OnPaste given %+v", seen.ParagraphStyleAt(0))
+	}
+	got := doc.Text()
+	if got.String() != "mid\nendx" {
+		t.Fatalf("pasted %q", got.String())
+	}
+	for start, p := range got.Paragraphs() {
+		if p.Style.Align != ui.Start {
+			t.Fatalf("paragraph at %d aligned %v", start, p.Style.Align)
+		}
+	}
+	if r := runsOf(got.Slice(4, 7)); r != "*end*" {
+		t.Fatalf("runs %q", r)
+	}
+}
+
 func TestJSON(t *testing.T) {
 	in := sample()
 	b, err := in.MarshalJSON()

@@ -39,6 +39,11 @@ type EditorOptions struct {
 	// OnPlainPaste runs when a paste has no text. Returning true means
 	// the app took it, as a picture on the clipboard.
 	OnPlainPaste func() bool
+	// OnPaste, when set, is given the text a paste brings from the
+	// clipboard, HTML, RTF, Markdown or another editor's copy, and returns
+	// what to insert, as an app leaves out what its files cannot keep.
+	// Plain text and Paste and Match Style do not pass through it.
+	OnPaste func(Text) Text
 	// TagStyle styles the runs that carry a Tag, as an app shows mentions
 	// or comments.
 	TagStyle func(tag string, s *ui.Span)
