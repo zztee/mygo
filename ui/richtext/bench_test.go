@@ -55,6 +55,35 @@ func BenchmarkTypeFrame(b *testing.B) {
 	}
 }
 
+// BenchmarkTypeFrameBelow is BenchmarkTypeFrame with an EditorOptions.Below
+// that the paragraphs in view are asked about each frame, and that adds
+// room under the one typed in: what asking it costs, where each answer
+// needs where its paragraph starts.
+func BenchmarkTypeFrameBelow(b *testing.B) {
+	for _, n := range benchParagraphs {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			doc := NewDocument(longText(n))
+			draw := func(*ui.Painter, ui.Rect) {}
+			mid := doc.Text().Len() / 2
+			below := func(t Text, p int, st ParagraphStyle) (float32, func(*ui.Painter, ui.Rect)) {
+				if start := t.ParagraphStart(p); start > mid || mid-start > 200 {
+					return 0, nil
+				}
+				return 40, draw
+			}
+			tt := ui.NewTester(func(c *ui.Context) { Editor(c, doc, EditorOptions{Below: below}).Fill() }, 1000, 800)
+			tt.Press(500, 400)
+			tt.Release(500, 400)
+			doc.SetSelection(mid, mid)
+			tt.Frame()
+			b.ReportAllocs()
+			for b.Loop() {
+				tt.Type("x")
+			}
+		})
+	}
+}
+
 // BenchmarkReplace replaces a rune in the middle of a document's text,
 // the edit a keystroke makes, without drawing.
 func BenchmarkReplace(b *testing.B) {
@@ -90,6 +119,19 @@ func BenchmarkFormat(b *testing.B) {
 func BenchmarkScrollFrame(b *testing.B) {
 	doc := NewDocument(longText(100000))
 	tt := ui.NewTester(func(c *ui.Context) { Editor(c, doc).Fill() }, 1000, 800)
+	tt.Frame()
+	b.ReportAllocs()
+	for b.Loop() {
+		tt.Scroll(500, 400, 0, 120)
+	}
+}
+
+// BenchmarkScrollFrameBelow is BenchmarkScrollFrame with an
+// EditorOptions.Below asked about each paragraph scrolled into view.
+func BenchmarkScrollFrameBelow(b *testing.B) {
+	doc := NewDocument(longText(100000))
+	below := func(Text, int, ParagraphStyle) (float32, func(*ui.Painter, ui.Rect)) { return 0, nil }
+	tt := ui.NewTester(func(c *ui.Context) { Editor(c, doc, EditorOptions{Below: below}).Fill() }, 1000, 800)
 	tt.Frame()
 	b.ReportAllocs()
 	for b.Loop() {

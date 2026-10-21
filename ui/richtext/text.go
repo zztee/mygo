@@ -472,6 +472,12 @@ func (t Text) paraStart(p int) int {
 	return rope.Prefix(t.text, rope.LineStart(t.text, p)).Runes
 }
 
+// ParagraphStart returns the rune paragraph p starts at, counted from 0 up
+// to ParagraphCount.
+func (t Text) ParagraphStart(p int) int {
+	return t.paraStart(min(p, t.ParagraphCount()-1))
+}
+
 // ParagraphRange returns where the paragraph holding rune i starts and
 // ends, before its newline.
 func (t Text) ParagraphRange(i int) (start, end int) {

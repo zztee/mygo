@@ -90,6 +90,16 @@ type EditorOptions struct {
 	// after an item was chosen, where the item's Chosen reports it, as
 	// the function given to ui.Element.ContextMenu does.
 	ContextMenu func(m *ui.Menu, attachment int)
+	// Below adds room under a paragraph, after its block's padding, and
+	// draws there, as an app shows what lines of source make, a formula
+	// or a diagram, under the last of them. It gets the text shown, the
+	// paragraph's number in it, counted from 0, which Text.ParagraphStart
+	// turns into where it starts, and its style; it returns the room's
+	// height in DIPs and what paints it in the column, 0 and nil for none.
+	// It runs once a frame for each paragraph in view, and as paragraphs
+	// are laid out, so it should be quick for those it adds nothing to.
+	// The pointer in the room goes to the paragraph's last line.
+	Below func(t Text, p int, st ParagraphStyle) (h float32, draw func(p *ui.Painter, r ui.Rect))
 }
 
 // Scroll is where an editor is scrolled, for an app showing its own scroll
@@ -316,6 +326,9 @@ type view struct {
 	// lex[i] is the tokenizer state after paragraph i, for the
 	// paragraphs before the first an edit changed.
 	lex []uint64
+	// frame counts the paints, for EditorOptions.Below to be asked once
+	// a frame.
+	frame uint64
 }
 
 type editMode uint8
@@ -345,6 +358,11 @@ type paraView struct {
 	h            float32
 	// space is the space above and below it, in h.
 	space float32
+	// below is the room EditorOptions.Below adds under it, in h, and
+	// draw what paints there, as asked in frame belowAt.
+	below     float32
+	drawBelow func(*ui.Painter, ui.Rect)
+	belowAt   uint64
 }
 
 // look is how the text of an editor looks: its font and the theme's
@@ -784,6 +802,9 @@ func (v *view) paraLayout(p int) *paraView {
 		// The space around it follows its neighbours, which may have
 		// changed without it: a code block's last line, the first heading.
 		v.respace(p)
+		if pv.belowAt != v.frame {
+			v.rebelow(p, pv, para.style)
+		}
 		return pv
 	}
 	composed := compose
@@ -843,7 +864,8 @@ func (v *view) paraLayout(p int) *paraView {
 	}
 	above, below := v.space(p, para.style)
 	_, lh := l.Size()
-	h := above + lh + below
+	room, draw := v.belowOf(p, para.style)
+	h := above + lh + below + room
 	if pv.layout == nil {
 		v.laid++
 	}
@@ -853,8 +875,35 @@ func (v *view) paraLayout(p int) *paraView {
 		v.hs.add(p, float64(h), -1)
 	}
 	*pv = paraView{layout: l, units: units, id: para.id, runs: first, nruns: len(para.runs), style: para.style,
-		compose: composed, at: at, lexIn: lexIn, h: h, space: above + below}
+		compose: composed, at: at, lexIn: lexIn, h: h, space: above + below,
+		below: room, drawBelow: draw, belowAt: v.frame}
 	return pv
+}
+
+// belowOf asks EditorOptions.Below for the room under paragraph p, of
+// style st.
+func (v *view) belowOf(p int, st ParagraphStyle) (float32, func(*ui.Painter, ui.Rect)) {
+	if v.opts.Below == nil {
+		return 0, nil
+	}
+	h, draw := v.opts.Below(v.shown, p, st)
+	if h <= 0 || draw == nil {
+		return 0, nil
+	}
+	return h, draw
+}
+
+// rebelow asks again for the room under paragraph p, laid out, which
+// may change with the paragraphs around it, and takes its height in.
+func (v *view) rebelow(p int, pv *paraView, st ParagraphStyle) {
+	pv.belowAt = v.frame
+	room, draw := v.belowOf(p, st)
+	pv.drawBelow = draw
+	if room != pv.below {
+		v.hs.add(p, float64(room-pv.below), 0)
+		pv.h += room - pv.below
+		pv.below = room
+	}
 }
 
 // codeLineSpans colors a line of a fenced block from its language. ok is

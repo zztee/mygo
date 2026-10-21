@@ -12,6 +12,7 @@ import (
 // composition, the caret and the scroll bar.
 func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	v.rect = r
+	v.frame++
 	w, h := v.column(r.W), max(r.H-2*v.padY, 1)
 	v.layout(w, h)
 	ox, oy := r.X+v.padX, r.Y+v.padY
@@ -30,7 +31,10 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		px, py := v.origin(i)
 		x, y := ox+px, oy+float32(py-v.scroll)
 		ga, gb := v.gaps(i, st)
-		v.paintBlock(p, i, st, ox, top+ga, pv.h-ga-gb, w)
+		v.paintBlock(p, i, st, ox, top+ga, pv.h-ga-gb-pv.below, w)
+		if pv.drawBelow != nil {
+			pv.drawBelow(p, ui.Rect{X: ox, Y: top + pv.h - gb - pv.below, W: w, H: pv.below})
+		}
 		ps := v.shown.paraStart(i)
 		pe := ps + v.para(i).n
 		if a != z && a <= pe && z >= ps && (focused || v.opts.ReadOnly) {
