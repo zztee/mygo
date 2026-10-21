@@ -636,3 +636,30 @@ func TestShiftEnterBreaksLine(t *testing.T) {
 		t.Fatalf("plain %q", got)
 	}
 }
+
+// A fence of tildes, a longer one, and attributes after the language
+// come back as they were.
+func TestCodeFenceKeepsInfo(t *testing.T) {
+	for _, md := range []string{
+		"~~~python {linenos=true}\nprint(1)\n~~~",
+		"```go title=\"main.go\"\nfunc main() {}\n```",
+		"~~~~\nplain\n~~~~",
+		"````\n```\n````",
+		"~~~\n~~~~ in it\n~~~~~",
+	} {
+		got := ParseMarkdown(md).Markdown()
+		if md == "~~~\n~~~~ in it\n~~~~~" {
+			md = "~~~~~\n~~~~ in it\n~~~~~"
+		}
+		if got != md {
+			t.Errorf("%q came back as %q", md, got)
+		}
+	}
+	st := ParseMarkdown("~~~js {a}\nx\n~~~").ParagraphStyleAt(0)
+	if st.Fence != "~~~" || st.Info != "{a}" || st.Language != "js" {
+		t.Fatalf("%+v", st)
+	}
+	if s := (ParagraphStyle{CodeBlock: true, Fence: "~`~", Info: "a\nb"}).normalized(); s.Fence != "" || s.Info != "" {
+		t.Fatalf("%+v", s)
+	}
+}

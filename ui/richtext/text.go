@@ -217,6 +217,12 @@ func (s ParagraphStyle) normalized() ParagraphStyle {
 	if !s.CodeBlock {
 		s.Language = ""
 	}
+	if !s.CodeBlock || !fenceRun(s.Fence) {
+		s.Fence = ""
+	}
+	if !s.CodeBlock || s.Language == "" || strings.ContainsAny(s.Info, "\r\n") {
+		s.Info = ""
+	}
 	return s
 }
 
@@ -258,6 +264,11 @@ type ParagraphStyle struct {
 	// fence's info, and how it is colored. Lines next to each other make
 	// one block only when they have the same.
 	Language string `json:"language,omitempty"`
+	// Fence is the run of backticks or tildes a block of code was fenced
+	// with, as "~~~", and Info what its fence said after the language, as
+	// "{linenos=true}". "" is the usual ``` and nothing.
+	Fence string `json:"fence,omitempty"`
+	Info  string `json:"info,omitempty"`
 }
 
 // Run is a run of text with its attributes.

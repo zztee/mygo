@@ -90,16 +90,23 @@ func (t Text) Markdown() string {
 		switch {
 		case st.CodeBlock:
 			fence := "```"
+			if st.Fence != "" {
+				fence = st.Fence
+			}
 			end := i + 1
 			for end < len(paras) && sameBlockOfCode(st, paras[end].Style) {
 				end++
 			}
 			for _, q := range paras[i:end] {
 				for strings.Contains(plainOf(q), fence) {
-					fence += "`"
+					fence += fence[:1]
 				}
 			}
-			b.WriteString(lead + fence + st.Language + "\n")
+			info := st.Language
+			if st.Info != "" && (fence[0] == '~' || !strings.Contains(st.Info, "`")) {
+				info += " " + st.Info
+			}
+			b.WriteString(lead + fence + info + "\n")
 			for ; i < end; i++ {
 				if line := plainOf(paras[i]); line != "" {
 					b.WriteString(lead + line + "\n")
@@ -560,5 +567,12 @@ func markdownTitle(t string) string {
 // sameBlockOfCode reports whether lines of code of styles a and b, one
 // after the other, are the same block.
 func sameBlockOfCode(a, b ParagraphStyle) bool {
-	return a.CodeBlock && b.CodeBlock && a.Quote == b.Quote && a.Indent == b.Indent && a.Language == b.Language
+	return a.CodeBlock && b.CodeBlock && a.Quote == b.Quote && a.Indent == b.Indent && a.Language == b.Language &&
+		a.Fence == b.Fence && a.Info == b.Info
+}
+
+// fenceRun reports whether s can fence a block of code: three or more
+// backticks, or of tildes.
+func fenceRun(s string) bool {
+	return len(s) >= 3 && (strings.Trim(s, "`") == "" || strings.Trim(s, "~") == "")
 }

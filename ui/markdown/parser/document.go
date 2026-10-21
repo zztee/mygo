@@ -175,6 +175,15 @@ func (b *Block) Info() string {
 	return b.info
 }
 
+// Fence returns the run of backticks or tildes that opened a fenced code
+// block, or "".
+func (b *Block) Fence() string {
+	if b.Kind != CodeBlock || !b.Fenced || b.parse.fenceLength < 3 {
+		return ""
+	}
+	return strings.Repeat(string(b.parse.fenceChar), int(b.parse.fenceLength))
+}
+
 // Label returns a footnote definition's label.
 func (b *Block) Label() string {
 	if b.Kind != FootnoteDefinition {
