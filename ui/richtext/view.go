@@ -273,11 +273,16 @@ type view struct {
 	shown      Text
 	version    uint64
 	selVersion uint64
-	paras      []paraView
-	hs         heights
-	laid       int
-	look       look
-	base       ui.Font
+	// refreshed is the last Document.Refresh taken; relay the paragraphs
+	// it named, for layout to lay out again, or all of them.
+	refreshed uint64
+	relay     []int
+	relayAll  bool
+	paras     []paraView
+	hs        heights
+	laid      int
+	look      look
+	base      ui.Font
 	// width is the content's, which the layouts wrap at; padX and padY
 	// the room around the text in the element.
 	width, viewH float32
@@ -398,6 +403,7 @@ func build(c *ui.Context, doc *Document, options []EditorOptions, styled bool) u
 		doc.lock()
 		v.selAnchor, v.caret = doc.anchor, doc.caret
 		v.selVersion = doc.selVersion
+		v.refreshed = doc.refreshed
 		doc.mu.Unlock()
 	}
 	margin, syntax := v.opts.Margin, v.opts.Syntax != nil
@@ -522,6 +528,8 @@ func (v *view) lockedSync() (change, bool) {
 			v.lex = v.lex[:0]
 			v.laid = 0
 			v.resetHeights()
+			v.relay = v.relay[:0]
+			v.refreshed = d.refreshed // none laid out to lay out again
 			moved = false
 		}
 		v.shown, v.version = d.text, d.version
@@ -541,7 +549,73 @@ func (v *view) lockedSync() (change, bool) {
 		v.composeCaret, v.composeSelected = 0, ui.TextInputRange{}
 		v.reveal = true
 	}
+	if d.refreshed != v.refreshed {
+		v.takeRefreshes(d)
+	}
 	return c, moved
+}
+
+// takeRefreshes takes the calls of Document.Refresh since the editor last
+// did, the text in step with the document's: the paragraphs they name
+// give up their layouts, keeping their heights until layout measures them
+// again. An editor further behind than the document remembers lays out
+// every paragraph again.
+func (v *view) takeRefreshes(d *Document) {
+	since := v.refreshed
+	v.refreshed = d.refreshed
+	if len(d.refreshes) == 0 || d.refreshes[0].n > since+1 {
+		v.relayAll = true
+		return
+	}
+	var ats map[*Attachment]bool
+	for _, r := range d.refreshes {
+		if r.n <= since {
+			continue
+		}
+		if r.ats != nil {
+			if ats == nil {
+				ats = map[*Attachment]bool{}
+			}
+			for _, at := range r.ats {
+				ats[at] = true
+			}
+			continue
+		}
+		c, ok := d.since(r.version)
+		if !ok {
+			v.relayAll = true
+			return
+		}
+		removed, inserted := c.oldEnd-c.start, c.newEnd-c.start
+		start := mapPosition(r.start, c.start, removed, inserted, false)
+		end := mapPosition(r.end, c.start, removed, inserted, true)
+		for p := v.shown.paraAt(start); p <= v.shown.paraAt(end); p++ {
+			v.unlay(p)
+		}
+	}
+	if ats != nil {
+		seqEach(v.shown.seq(), 0, func(p int, para *richPara) bool {
+			for _, r := range para.runs {
+				if r.a.Attachment != nil && ats[r.a.Attachment] {
+					v.unlay(p)
+					break
+				}
+			}
+			return true
+		})
+	}
+}
+
+// unlay has layout lay paragraph p out again, as Refresh asked.
+func (v *view) unlay(p int) {
+	if p < 0 || p >= len(v.paras) {
+		return
+	}
+	if pv := &v.paras[p]; pv.layout != nil {
+		pv.layout = nil
+		v.laid--
+	}
+	v.relay = append(v.relay, p)
 }
 
 // replaced takes a change of the text: the paragraphs from the one holding
@@ -557,6 +631,18 @@ func (v *view) replaced(c change, now Text) {
 			v.laid--
 		}
 	}
+	// The paragraphs Refresh named after the change move with it; those it
+	// replaced are laid out anew anyway.
+	relay := v.relay[:0]
+	for _, p := range v.relay {
+		switch {
+		case p < pa:
+			relay = append(relay, p)
+		case p > pz:
+			relay = append(relay, p+npz-pz)
+		}
+	}
+	v.relay = relay
 	if npz == pz {
 		// As many paragraphs: they give up their heights in place, as a
 		// keystroke's does, rather than summing all the others again.
@@ -1116,7 +1202,7 @@ func (v *view) setScroll(y float64) {
 // layout lays out the paragraphs in view of a content box w×h, and those
 // the caret is in when it is to be revealed.
 func (v *view) layout(w, h float32) {
-	if key := v.lookKey(); w != v.width || key != v.laidLook {
+	if key := v.lookKey(); w != v.width || key != v.laidLook || v.relayAll {
 		// Another width, font or theme: every paragraph anew.
 		v.laidLook = key
 		for i := range v.paras {
@@ -1125,7 +1211,16 @@ func (v *view) layout(w, h float32) {
 		v.laid = 0
 		v.width = w
 		v.resetHeights()
+		v.relayAll, v.relay = false, v.relay[:0]
 	}
+	// The paragraphs Refresh named take their heights now, in view or
+	// not, so that the heights above the view and the scroll stay true.
+	for _, p := range v.relay {
+		if p < len(v.paras) {
+			v.paraLayout(p)
+		}
+	}
+	v.relay = v.relay[:0]
 	v.viewH = h
 	v.estimate()
 	v.place(h)

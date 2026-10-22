@@ -35,6 +35,19 @@ type Document struct {
 	// log is what changed since the versions the editor last saw, for it
 	// to lay out only the paragraphs that changed.
 	log []change
+	// refreshes are the latest calls of Refresh, which the editor takes
+	// as it takes the log; refreshed counts them all.
+	refreshes []refresh
+	refreshed uint64
+}
+
+// refresh is a call of Refresh, number n: the paragraphs from the one
+// holding rune start to the one holding rune end of the text at version,
+// or, from RefreshAttachments, those holding one of ats.
+type refresh struct {
+	n, version uint64
+	start, end int
+	ats        []*Attachment
 }
 
 // change is a change of a document: the runes from start to oldEnd
@@ -88,6 +101,7 @@ func (d *Document) SetText(text Text) {
 	d.text = text
 	d.undo, d.redo = nil, nil
 	d.coalesce = false
+	d.refreshes = nil // the editor lays the new text out whole
 	d.changed(0, old, text.Len())
 	n := text.Len()
 	d.setSelection(n, n)
@@ -188,6 +202,45 @@ func (d *Document) changed(start, oldEnd, newEnd int) {
 	if len(d.log) > 256 {
 		// The editor reloads a text it is too far behind.
 		d.log = append(d.log[:0], d.log[len(d.log)-128:]...)
+	}
+}
+
+// Refresh has the editors showing d lay out again the paragraphs from the
+// one holding rune start to the one holding rune end, as what they show
+// changed though their text did not: the app changed an attachment in
+// place, its size or what it draws. It is no edit: it makes no step of
+// undo, keeps the Version and leaves the selection be. At its next frame
+// the editor lays out those paragraphs and takes their heights, keeping
+// the layouts of the others and the paragraph at the top of the view
+// where it is.
+func (d *Document) Refresh(start, end int) {
+	d.lock()
+	defer d.mu.Unlock()
+	n := d.text.Len()
+	start, end = max(0, min(start, n)), max(0, min(end, n))
+	d.addRefresh(refresh{version: d.version, start: min(start, end), end: max(start, end)})
+}
+
+// RefreshAttachments is Refresh for the paragraphs that hold one of ats,
+// wherever edits since put them.
+func (d *Document) RefreshAttachments(ats ...*Attachment) {
+	if len(ats) == 0 {
+		return
+	}
+	d.lock()
+	defer d.mu.Unlock()
+	d.addRefresh(refresh{ats: slices.Clone(ats)})
+}
+
+func (d *Document) addRefresh(r refresh) {
+	d.refreshed++
+	r.n = d.refreshed
+	d.refreshes = append(d.refreshes, r)
+	if len(d.refreshes) > 64 {
+		// An editor further behind lays out every paragraph again.
+		n := copy(d.refreshes, d.refreshes[len(d.refreshes)-32:])
+		clear(d.refreshes[n:]) // let go of their attachments
+		d.refreshes = d.refreshes[:n]
 	}
 }
 
