@@ -166,7 +166,7 @@ func (c clipText) text() Text {
 			a.Color, _ = parseCSSColor(cr.Attributes.Color)
 			a.Background, _ = parseCSSColor(cr.Attributes.Background)
 			if at := cr.Attachment; at != nil {
-				a.Attachment = &Attachment{Name: at.Name, URL: at.URL, Title: at.Title, Width: side(at.Width), Height: side(at.Height)}
+				a.Attachment = &Attachment{Name: at.Name, URL: safeImage(at.URL), Title: at.Title, Width: side(at.Width), Height: side(at.Height)}
 			}
 			p.Runs = append(p.Runs, Run{Text: cr.Text, Attributes: a})
 		}

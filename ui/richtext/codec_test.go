@@ -296,6 +296,58 @@ func TestCodecsSanitize(t *testing.T) {
 	}
 }
 
+// TestImageDataURLs checks that a picture may be held in a data: URL of an
+// image, an SVG too, as Markdown, HTML and this editor's copies give it,
+// and is written out so; a link to a data: URL, a data: URL of another
+// type and a script are not taken.
+func TestImageDataURLs(t *testing.T) {
+	png := "data:image/png;base64,iVBORw0KGgo="
+	svg := "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E"
+	for _, c := range []struct{ src, want string }{
+		{png, png},
+		{svg, svg},
+		{"data:image/svg+xml;charset=utf-8;base64,PHN2Zy8+", "data:image/svg+xml;charset=utf-8;base64,PHN2Zy8+"},
+		{"DATA:IMAGE/GIF;BASE64,R0lGODlh", "DATA:IMAGE/GIF;BASE64,R0lGODlh"},
+		{"data:text/html;base64,PHNjcmlwdD4=", ""},
+		{"data:,hello", ""},
+		{"data:image/,x", ""},
+		{"data:image/png", ""},
+		{"javascript:alert(1)", ""},
+		{"cat.png", "cat.png"},
+	} {
+		at := ParseMarkdown("![a](" + c.src + ")").AttributesAt(0).Attachment
+		if at == nil || at.URL != c.want {
+			t.Errorf("Markdown %s: attachment %+v, want URL %q", c.src, at, c.want)
+		}
+		at = ParseHTML(`<img src="` + c.src + `" alt="a">`).AttributesAt(0).Attachment
+		if at == nil || at.URL != c.want {
+			t.Errorf("HTML %s: attachment %+v, want URL %q", c.src, at, c.want)
+		}
+		pic := TextOf(Paragraph{Runs: []Run{{Text: string(ObjectReplacement), Attributes: Attributes{Attachment: &Attachment{Name: "a", URL: c.src}}}}})
+		if h := pic.HTML(); !strings.Contains(h, `<img src="`+c.want+`"`) {
+			t.Errorf("%s written as %s", c.src, h)
+		}
+		b := encodeClip(pic)
+		encodeClip(NewText("another copy")) // the first is read as JSON
+		if got, ok := decodeClip(b); !ok || got.AttributesAt(0).Attachment == nil || got.AttributesAt(0).Attachment.URL != c.want {
+			t.Errorf("%s copied as %+v", c.src, got.AttributesAt(0).Attachment)
+		}
+	}
+	// A link to a data: URL is still none.
+	if l := ParseMarkdown("[x](" + png + ")").AttributesAt(0).Link; l != "" {
+		t.Errorf("link %q", l)
+	}
+	if l := ParseHTML(`<a href="` + png + `">x</a>`).AttributesAt(0).Link; l != "" {
+		t.Errorf("HTML link %q", l)
+	}
+	// Written back as it was read.
+	for _, md := range []string{"![a](" + png + ")", "![s](" + svg + " \"t\")", "a ![b](" + png + ") c"} {
+		if got := ParseMarkdown(md).Markdown(); got != md {
+			t.Errorf("%q written back as %q", md, got)
+		}
+	}
+}
+
 // TestHTMLQuotes checks that quoted lists, headings and code stay quoted
 // through HTML.
 func TestHTMLQuotes(t *testing.T) {

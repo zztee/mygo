@@ -224,7 +224,7 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 			x = a.extending()
 			// An image inside a link links there.
 			x.Link, x.LinkTitle = a.Link, a.LinkTitle
-			x.Attachment = &Attachment{Name: parser.PlainText(in[k+1 : n.Next]), URL: safeLink(n.Dest), Title: n.Title}
+			x.Attachment = &Attachment{Name: parser.PlainText(in[k+1 : n.Next]), URL: safeImage(n.Dest), Title: n.Title}
 			*out = append(*out, Run{Text: string(ObjectReplacement), Attributes: x})
 		case parser.HTML:
 			m.tag(n.Text, out, a)

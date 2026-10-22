@@ -170,6 +170,32 @@ func safeLink(s string) string {
 	return s
 }
 
+// safeImage is safeLink for the source of a picture, which may also hold
+// the picture itself: a data: URL of an image, an SVG too, which a page
+// draws without running it.
+func safeImage(s string) string {
+	s = strings.TrimFunc(s, func(r rune) bool { return r <= ' ' })
+	if imageData(s) {
+		return s
+	}
+	return safeLink(s)
+}
+
+// imageData reports whether s is a data: URL of a media type image/….
+func imageData(s string) bool {
+	if len(s) < 5 || !strings.EqualFold(s[:5], "data:") {
+		return false
+	}
+	meta, _, ok := strings.Cut(s[5:], ",")
+	if !ok {
+		return false
+	}
+	media, _, _ := strings.Cut(meta, ";")
+	media = strings.ToLower(strings.TrimSpace(media))
+	sub, ok := strings.CutPrefix(media, "image/")
+	return ok && sub != "" && !strings.ContainsAny(sub, " \t\r\n")
+}
+
 // blockTag returns the tag of a paragraph of style st: p, or h1 to h6.
 func blockTag(st ParagraphStyle) string {
 	if st.Heading > 0 {
@@ -200,7 +226,7 @@ func writeRuns(b *strings.Builder, runs []Run) {
 func writeRun(b *strings.Builder, r Run) {
 	a := r.Attributes
 	if at := a.Attachment; at != nil {
-		src := at.URL
+		src := safeImage(at.URL)
 		w, h := at.size()
 		fmt.Fprintf(b, `<img src="%s" alt="%s" width="%d" height="%d">`, html.EscapeString(src), html.EscapeString(at.Name), int(w+0.5), int(h+0.5))
 		return
@@ -454,7 +480,7 @@ func (b *htmlBuilder) node(n *xhtml.Node, a Attributes) {
 		b.flush()
 		return
 	case atom.Img:
-		src, alt := attr(n, "src"), attr(n, "alt")
+		src, alt := safeImage(attr(n, "src")), attr(n, "alt")
 		at := &Attachment{Name: alt, URL: src}
 		at.Width, at.Height = imageSide(attr(n, "width")), imageSide(attr(n, "height"))
 		if data, ok := strings.CutPrefix(src, "data:"); ok {
