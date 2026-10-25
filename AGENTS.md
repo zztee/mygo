@@ -50,6 +50,8 @@ wire protocol, TypeScript generation, and the checklist for adding features.
 
 ## Commands
 
+While iterating, run only what the change touches (e.g. `go test ./<pkg>/...`, one `GOOS` vet for platform-neutral code). Run the full list below once before committing, not after every edit.
+
 ```sh
 go build ./... && GOOS=linux go build ./... && GOOS=windows go build ./...  # all must pass
 go vet ./... && GOOS=linux go vet ./... && GOOS=windows go vet ./...
