@@ -463,15 +463,21 @@ func (d *Document) CanRedo() bool {
 // Undo takes back the last step of undo, and Redo the last step undone,
 // restoring the text, its attributes and the selection.
 func (d *Document) Undo() {
-	d.lock()
-	defer d.mu.Unlock()
-	d.takeBack(false)
+	d.undoRedo(false)
 }
 
 func (d *Document) Redo() {
+	d.undoRedo(true)
+}
+
+// undoRedo reports whether this operation changed history, under the
+// same lock as the operation, so an external edit cannot change its result.
+func (d *Document) undoRedo(redo bool) bool {
 	d.lock()
 	defer d.mu.Unlock()
-	d.takeBack(true)
+	before := d.version
+	d.takeBack(redo)
+	return d.version != before
 }
 
 func (d *Document) takeBack(redo bool) {

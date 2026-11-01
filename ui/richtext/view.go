@@ -44,6 +44,12 @@ type EditorOptions struct {
 	// what to insert, as an app leaves out what its files cannot keep.
 	// Plain text and Paste and Match Style do not pass through it.
 	OnPaste func(Text) Text
+	// OnHistory runs after each undo or redo that changed the document,
+	// before the editor syncs and takes the next input. redo is true for
+	// redo. It runs without the document's lock held and may call its
+	// methods, as an app skips a presentation-only step of history.
+	// Direct calls to Document.Undo and Document.Redo do not call it.
+	OnHistory func(redo bool)
 	// TagStyle styles the runs that carry a Tag, as an app shows mentions
 	// or comments.
 	TagStyle func(tag string, s *ui.Span)

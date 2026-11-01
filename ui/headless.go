@@ -210,7 +210,7 @@ func coreRender(view func(c *context), width, height int, scale float32) *image.
 
 // Tester runs a view without a window, as a test drives it: it renders
 // frames in memory and sends the view pointer and keyboard input, between
-// which it settles the frames the view asks for.
+// which it settles the frames the view asks for, except inside Batch.
 //
 // Its clock stands still unless the test moves it with Advance, so what
 // depends on time (animations, Context.After, the clicks that make a
@@ -224,6 +224,7 @@ type Tester struct {
 	// that of the last frame.
 	now     time.Time
 	frameAt time.Time
+	batch   int
 }
 
 // NewTester starts testing view in a window of width×height DIPs. Two
@@ -244,6 +245,9 @@ func coreNewTester(view func(c *context), width, height int) *Tester {
 
 // settle runs frames until the view asks for no more, or 20 of them.
 func (t *Tester) settle() {
+	if t.batch > 0 {
+		return
+	}
 	t.frameAt = t.Now()
 	for i := 0; i < 20; i++ {
 		t.h.requested.Store(false)
@@ -254,6 +258,19 @@ func (t *Tester) settle() {
 			return
 		}
 	}
+}
+
+// Batch sends the input in fn without settling frames between events,
+// as several events can arrive before the next frame of a real window.
+// Nested batches settle only when the outermost call returns. Advance
+// keeps its usual behavior, running timed frames as it moves the clock.
+func (t *Tester) Batch(fn func()) {
+	t.batch++
+	defer func() {
+		t.batch--
+		t.settle()
+	}()
+	fn()
 }
 
 // asked reports whether the view asked for a frame.

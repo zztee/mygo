@@ -137,10 +137,8 @@ func (v *view) command(fn func(d *Document)) {
 // takeBack undoes the document's last step, or redoes the last undone.
 func (v *view) takeBack(redo bool) {
 	v.command(func(d *Document) {
-		if redo {
-			d.Redo()
-		} else {
-			d.Undo()
+		if d.undoRedo(redo) && v.opts.OnHistory != nil {
+			v.opts.OnHistory(redo)
 		}
 	})
 	v.reveal = true
