@@ -72,33 +72,58 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		top, size := v.thumbBox()
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: r.Y + top, W: 5, H: size}, look.Text.Alpha(0.3), 2.5)
 	}
-	if v.opts.Measure && v.measure(4*time.Millisecond) {
-		p.AnimationFrame()
+	if !v.opts.Measure {
+		v.measuredAt = time.Time{}
+		return
+	}
+	if _, unknown := v.hs.totals(); unknown == 0 {
+		v.measuredAt = time.Time{}
+		return
+	}
+	if v.opts.MeasureInterval > 0 {
+		if wait := v.opts.MeasureInterval - p.Now().Sub(v.measuredAt); wait > 0 {
+			p.After(wait)
+			return
+		}
+	}
+	budget := v.opts.MeasureBudget
+	if budget <= 0 {
+		budget = 4 * time.Millisecond
+	}
+	v.measuredAt = p.Now()
+	if v.measure(budget, time.Now) {
+		if v.opts.MeasureInterval > 0 {
+			p.After(v.opts.MeasureInterval)
+		} else {
+			p.AnimationFrame()
+		}
 	}
 }
 
 // measure lays out paragraphs not measured yet, out of view, for a while,
 // and reports whether some are left.
-func (v *view) measure(d time.Duration) bool {
+func (v *view) measure(d time.Duration, now func() time.Time) bool {
 	if _, unknown := v.hs.totals(); unknown == 0 {
 		return false
 	}
-	start := time.Now()
-	more := false
+	start := now()
+	measured := false
 	for i := range v.paras {
 		if v.paras[i].h > 0 {
 			continue
 		}
-		if time.Since(start) > d {
-			more = true
+		// Complete at least one paragraph, even with a tiny budget.
+		if measured && now().Sub(start) >= d {
 			break
 		}
 		v.paraLayout(i)
+		measured = true
 	}
 	v.estimate()
 	// The text in view stays where it is, as those above it grow.
 	v.scroll = max(0, v.hs.top(v.anchor)+v.anchorOff)
-	return more
+	_, unknown := v.hs.totals()
+	return unknown > 0
 }
 
 // paintBlock paints what a paragraph of style st shows behind its text:

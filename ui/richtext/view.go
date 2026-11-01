@@ -78,6 +78,14 @@ type EditorOptions struct {
 	// a frame, so that the text's height is exact rather than estimated,
 	// for an app that shows it, as Scroll's Content.
 	Measure bool
+	// MeasureBudget is the time spent measuring paragraphs out of view
+	// per pass; a nonpositive value uses 4ms. A paragraph is laid out
+	// atomically, so one paragraph may exceed the budget.
+	MeasureBudget time.Duration
+	// MeasureInterval is the least time between background measurement
+	// passes. A nonpositive value asks for the next display frame. Input
+	// and the layout of visible paragraphs do not wait for this interval.
+	MeasureInterval time.Duration
 	// OnAttachment runs as the pointer goes down on the box of an
 	// attachment, for an app that makes its own of presses there, as on
 	// a cell of a table it draws. i is the attachment's rune; x and y are
@@ -287,8 +295,10 @@ type view struct {
 	paras     []paraView
 	hs        heights
 	laid      int
-	look      look
-	base      ui.Font
+	// measuredAt is the last background pass, for MeasureInterval.
+	measuredAt time.Time
+	look       look
+	base       ui.Font
 	// width is the content's, which the layouts wrap at; padX and padY
 	// the room around the text in the element.
 	width, viewH float32
