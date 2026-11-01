@@ -67,6 +67,11 @@ type Attributes struct {
 	// soft line break, which Markdown writes back as one. Typing at its
 	// edges does not continue it.
 	SoftBreak bool
+	// SoftBreakBefore marks a zero-width Markdown soft break before each
+	// rune of the run. It adds no displayed character or offset. Edits at
+	// the boundary keep it before the inserted or remaining text; typing
+	// does not carry it to other characters.
+	SoftBreakBefore bool
 }
 
 // Bold reports whether the run is bold: its weight is 600 or more.
@@ -77,7 +82,7 @@ func (a Attributes) Bold() bool { return a.Weight >= 600 }
 // NSTextView and the expand rules of Peritext and Loro leave them; every
 // other attribute carries on to what is typed after it.
 func (a Attributes) extending() Attributes {
-	a.Link, a.LinkTitle, a.Code, a.Tag, a.Attachment, a.SoftBreak = "", "", false, "", nil, false
+	a.Link, a.LinkTitle, a.Code, a.Tag, a.Attachment, a.SoftBreak, a.SoftBreakBefore = "", "", false, "", nil, false, false
 	return a
 }
 
@@ -604,7 +609,8 @@ func (t Text) Runs(start, end int) iter.Seq2[int, Run] {
 }
 
 // Slice returns the runes from start to end with their attributes and the
-// styles of their paragraphs.
+// styles of their paragraphs. The invisible boundary before the first
+// rune and a pending boundary after the last stay outside the slice.
 func (t Text) Slice(start, end int) Text {
 	n := t.Len()
 	start, end = max(0, min(start, n)), max(0, min(end, n))
@@ -634,7 +640,15 @@ func (t Text) Slice(start, end int) Text {
 	})
 	_, rest := rope.Split(t.text, rope.ByteOfRune(t.text, start))
 	mid, _ := rope.Split(rest, rope.ByteOfRune(rest, end-start))
-	return Text{text: mid, paras: seqBuild(paras)}
+	result := Text{text: mid, paras: seqBuild(paras)}
+	// The boundary before the selection belongs to the surrounding text.
+	if paras[0].attributesAt(0).SoftBreakBefore {
+		result = result.withSoftBreakBefore(0, false)
+	}
+	if last := &paras[len(paras)-1]; last.attributesAt(last.n).SoftBreakBefore {
+		result = result.withSoftBreakBefore(result.Len(), false)
+	}
+	return result
 }
 
 // Replace returns the text with the runes from start to end replaced by
@@ -649,6 +663,7 @@ func (t Text) Replace(start, end int, with Text) Text {
 	sa, sz := t.paraStart(pa), t.paraStart(pz)
 	s := t.seq()
 	first, last := seqAt(s, pa), seqAt(s, pz)
+	wideBreak := first.attributesAt(start - sa).SoftBreakBefore
 	head := cutRuns(nil, first.runs, 0, start-sa)
 	tail := cutRuns(nil, last.runs, end-sz, last.n+1)
 	headN, tailN := start-sa, last.n-(end-sz)
@@ -696,10 +711,41 @@ func (t Text) Replace(start, end int, with Text) Text {
 	}
 	left, rest := rope.Split(t.text, rope.ByteOfRune(t.text, start))
 	_, right := rope.Split(rest, rope.ByteOfRune(rest, end-start))
-	return Text{
+	result := Text{
 		text:  rope.Join(rope.Join(left, with.text), right),
 		paras: seqReplace(s, pa, pz+1, out),
 	}
+	if wideBreak && (start != end || with.Len() > 0) {
+		// The break is before the edit, not part of its first character.
+		// Move it to the replacement, or to the next surviving character.
+		if start == end {
+			at := start + with.Len()
+			result = result.withSoftBreakBefore(at, false)
+		}
+		if ps, pe := result.ParagraphRange(start); ps < start && (start < pe || with.Len() == 0) {
+			result = result.withSoftBreakBefore(start, true)
+		}
+	}
+	return result
+}
+
+// withSoftBreakBefore changes one boundary, including the paragraph's end.
+// A temporarily empty last soft line keeps its boundary there while an
+// input method replaces its selection in a separate deletion and commit.
+func (t Text) withSoftBreakBefore(at int, keep bool) Text {
+	p := t.paraAt(at)
+	q := *seqAt(t.seq(), p)
+	i := at - t.paraStart(p)
+	a := q.attributesAt(i)
+	if a.SoftBreakBefore == keep {
+		return t
+	}
+	a.SoftBreakBefore = keep
+	runs := cutRuns(nil, q.runs, 0, i)
+	runs = appendRun(runs, attrRun{1, a})
+	q.runs = cutRuns(runs, q.runs, i+1, q.n+1)
+	t.paras = seqReplace(t.seq(), p, p+1, []richPara{q})
+	return t
 }
 
 // ReplaceString returns the text with the runes from start to end replaced

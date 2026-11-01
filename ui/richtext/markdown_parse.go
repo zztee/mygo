@@ -35,6 +35,8 @@ type mdReader struct {
 	// html counts the inline HTML tags open, by the attribute they turn
 	// on: <u>, <s>, <b> and <i> and their synonyms.
 	html [4]int
+	// wideBreak marks the first rune after an invisible soft break.
+	wideBreak bool
 }
 
 // blocks adds the children of block i in style st; depth is the level of
@@ -168,6 +170,7 @@ func (m *mdReader) inlinePara(st ParagraphStyle, in []parser.Inline, a Attribute
 func (m *mdReader) runs(in []parser.Inline, a Attributes) []Run {
 	var out []Run
 	m.html = [4]int{}
+	m.wideBreak = false
 	m.inlines(&out, in, 0, len(in), a)
 	return out
 }
@@ -186,7 +189,16 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 		if m.html[3] > 0 {
 			a.Italic = true
 		}
-		*out = addMDRun(*out, Run{Text: s, Attributes: a})
+		if m.wideBreak && s != "" {
+			_, n := utf8.DecodeRuneInString(s)
+			x := a
+			x.SoftBreakBefore = true
+			*out = addMDRun(*out, Run{Text: s[:n], Attributes: x})
+			s, m.wideBreak = s[n:], false
+		}
+		if s != "" {
+			*out = addMDRun(*out, Run{Text: s, Attributes: a})
+		}
 	}
 	for k := from; k < to; k = in[k].Next {
 		n := &in[k]
@@ -195,7 +207,9 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 		case parser.Text:
 			add(n.Text, a)
 		case parser.SoftBreak:
-			if !wideBreak(*out, in, k+1) {
+			if wideBreak(*out, in, k+1) {
+				m.wideBreak = true
+			} else {
 				x.SoftBreak = true
 				add(" ", x)
 			}
@@ -238,15 +252,7 @@ func (m *mdReader) inlines(out *[]Run, in []parser.Inline, from, to int, a Attri
 // underlines, strikethrough, bold and italic, and line breaks. Other
 // tags are left out, as a browser shows none.
 func (m *mdReader) tag(s string, out *[]Run, a Attributes) {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if !strings.HasPrefix(s, "<") || !strings.HasSuffix(s, ">") {
-		return
-	}
-	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, "<"), ">"))
-	closing := strings.HasPrefix(s, "/")
-	s = strings.TrimPrefix(s, "/")
-	s = strings.TrimSuffix(s, "/")
-	name, _, _ := strings.Cut(strings.TrimSpace(s), " ")
+	name, closing := markdownTag(s)
 	which := -1
 	switch name {
 	case "br":
@@ -269,6 +275,19 @@ func (m *mdReader) tag(s string, out *[]Run, a Attributes) {
 	} else {
 		m.html[which]++
 	}
+}
+
+// markdownTag returns the name and direction of an inline HTML tag.
+func markdownTag(s string) (name string, closing bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if !strings.HasPrefix(s, "<") || !strings.HasSuffix(s, ">") {
+		return "", false
+	}
+	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, "<"), ">"))
+	closing = strings.HasPrefix(s, "/")
+	s = strings.TrimSuffix(strings.TrimPrefix(s, "/"), "/")
+	name, _, _ = strings.Cut(strings.TrimSpace(s), " ")
+	return name, closing
 }
 
 // addMDRun appends r to runs, joined to the last when their attributes
@@ -296,6 +315,12 @@ func wideBreak(out []Run, in []parser.Inline, next int) bool {
 			return wideRune(before) && wideRune(after)
 		case parser.Emphasis, parser.Strong, parser.Strikethrough, parser.Link:
 			continue // their text comes next
+		case parser.HTML:
+			name, _ := markdownTag(in[next].Text)
+			switch name {
+			case "u", "ins", "s", "strike", "del", "b", "strong", "i", "em":
+				continue // These tags add a style without a visible character.
+			}
 		}
 		return false
 	}

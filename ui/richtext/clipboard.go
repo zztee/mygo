@@ -42,18 +42,19 @@ type clipRun struct {
 // clipAttributes are the Attributes of a run but its attachment, which
 // clipAttachment describes.
 type clipAttributes struct {
-	Font          string  `json:"font,omitempty"`
-	Size          float32 `json:"size,omitempty"`
-	Weight        int     `json:"weight,omitempty"`
-	Italic        bool    `json:"italic,omitempty"`
-	Underline     bool    `json:"underline,omitempty"`
-	Strikethrough bool    `json:"strikethrough,omitempty"`
-	Color         string  `json:"color,omitempty"`
-	Background    string  `json:"background,omitempty"`
-	Code          bool    `json:"code,omitempty"`
-	Link          string  `json:"link,omitempty"`
-	LinkTitle     string  `json:"linkTitle,omitempty"`
-	Tag           string  `json:"tag,omitempty"`
+	Font            string  `json:"font,omitempty"`
+	Size            float32 `json:"size,omitempty"`
+	Weight          int     `json:"weight,omitempty"`
+	Italic          bool    `json:"italic,omitempty"`
+	Underline       bool    `json:"underline,omitempty"`
+	Strikethrough   bool    `json:"strikethrough,omitempty"`
+	Color           string  `json:"color,omitempty"`
+	Background      string  `json:"background,omitempty"`
+	Code            bool    `json:"code,omitempty"`
+	Link            string  `json:"link,omitempty"`
+	LinkTitle       string  `json:"linkTitle,omitempty"`
+	Tag             string  `json:"tag,omitempty"`
+	SoftBreakBefore bool    `json:"softBreakBefore,omitempty"`
 }
 
 type clipAttachment struct {
@@ -113,7 +114,7 @@ func clipOf(t Text) clipText {
 			a := r.Attributes
 			cr := clipRun{Text: r.Text, Attributes: clipAttributes{
 				Font: a.Font, Size: a.Size, Weight: a.Weight, Italic: a.Italic, Underline: a.Underline,
-				Strikethrough: a.Strikethrough, Code: a.Code, Link: a.Link, LinkTitle: a.LinkTitle, Tag: a.Tag,
+				Strikethrough: a.Strikethrough, Code: a.Code, Link: a.Link, LinkTitle: a.LinkTitle, Tag: a.Tag, SoftBreakBefore: a.SoftBreakBefore,
 			}}
 			if a.Color.A > 0 {
 				cr.Attributes.Color = cssColor(a.Color)
@@ -158,7 +159,7 @@ func (c clipText) text() Text {
 			a := Attributes{
 				Font: cr.Attributes.Font, Size: cr.Attributes.Size, Weight: cr.Attributes.Weight, Italic: cr.Attributes.Italic,
 				Underline: cr.Attributes.Underline, Strikethrough: cr.Attributes.Strikethrough, Code: cr.Attributes.Code,
-				Link: safeLink(cr.Attributes.Link), Tag: cr.Attributes.Tag,
+				Link: safeLink(cr.Attributes.Link), Tag: cr.Attributes.Tag, SoftBreakBefore: cr.Attributes.SoftBreakBefore,
 			}
 			if a.Link != "" {
 				a.LinkTitle = cr.Attributes.LinkTitle

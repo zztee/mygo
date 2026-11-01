@@ -123,7 +123,7 @@ func (t Text) Markdown() string {
 			// A heading's closing #s are not its text: escape them. It
 			// has no lines of its own but HTML's.
 			var h strings.Builder
-			writeMarkdownRuns(&h, p.Runs)
+			writeMarkdownRuns(&h, markdownWideBreaks(p.Runs, false))
 			s := strings.ReplaceAll(h.String(), string(LineBreak), "<br>")
 			s = strings.ReplaceAll(s, string(softMark), " ")
 			if k := len(strings.TrimRight(s, "#")); k < len(s) {
@@ -166,7 +166,7 @@ func (t Text) Markdown() string {
 			b.WriteString(lead)
 		}
 		var r strings.Builder
-		writeMarkdownRuns(&r, p.Runs)
+		writeMarkdownRuns(&r, markdownWideBreaks(p.Runs, true))
 		b.WriteString(breakLines(r.String(), lead))
 	}
 	return b.String()
@@ -338,6 +338,41 @@ func writeMarkdownRuns(b *strings.Builder, runs []Run) {
 		s, _ = renderRuns(runs, html)
 	}
 	b.WriteString(s)
+}
+
+// markdownWideBreaks presents invisible boundaries to the Markdown writer
+// as soft breaks. Headings have no soft lines, so omit those boundaries.
+func markdownWideBreaks(runs []Run, keep bool) []Run {
+	first := -1
+	for i, r := range runs {
+		if r.Attributes.SoftBreakBefore {
+			first = i
+			break
+		}
+	}
+	if first < 0 {
+		return runs
+	}
+	out := append([]Run(nil), runs[:first]...)
+	for _, r := range runs[first:] {
+		if !r.Attributes.SoftBreakBefore {
+			out = addMDRun(out, r)
+			continue
+		}
+		r.Attributes.SoftBreakBefore = false
+		for _, ch := range r.Text {
+			if keep && len(out) > 0 {
+				before, _ := utf8.DecodeLastRuneInString(out[len(out)-1].Text)
+				// A boundary edited into a non-wide pair would read as
+				// an extra space. Keep the editor's text in that case.
+				if wideRune(before) && wideRune(ch) {
+					out = addMDRun(out, Run{Text: " ", Attributes: Attributes{SoftBreak: true}})
+				}
+			}
+			out = addMDRun(out, Run{Text: string(ch), Attributes: r.Attributes})
+		}
+	}
+	return out
 }
 
 // delimKey names a mark written in Markdown: the run it opens at and its

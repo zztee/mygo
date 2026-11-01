@@ -158,7 +158,7 @@ func (d *Document) typingAttributes() Attributes {
 func typingAttributes(t Text, start, end int) Attributes {
 	if start < end {
 		a := t.AttributesAt(start)
-		a.Attachment, a.SoftBreak = nil, false
+		a.Attachment, a.SoftBreak, a.SoftBreakBefore = nil, false, false
 		return a
 	}
 	ps, _ := t.ParagraphRange(start)
@@ -190,7 +190,7 @@ func typingAttributes(t Text, start, end int) Attributes {
 func (d *Document) SetTypingAttributes(a Attributes) {
 	d.lock()
 	defer d.mu.Unlock()
-	a.Attachment, a.SoftBreak = nil, false
+	a.Attachment, a.SoftBreak, a.SoftBreakBefore = nil, false, false
 	d.typing = &a
 }
 
