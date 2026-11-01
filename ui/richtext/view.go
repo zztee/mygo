@@ -128,6 +128,14 @@ type EditorOptions struct {
 	// are laid out, so it should be quick for those it adds nothing to.
 	// The pointer in the room goes to the paragraph's last line.
 	Below func(t Text, p int, st ParagraphStyle) (h float32, draw func(p *ui.Painter, r ui.Rect))
+	// OnBelow runs as the pointer goes down in the room Below adds.
+	// p is the paragraph's number, as given to Below; x and y are in
+	// DIPs from the top left of its drawing rectangle. Returning true
+	// takes a press of the primary button without moving the caret or
+	// selecting. The secondary button opens the editor's context menu
+	// afterwards regardless, as OnAttachment does. It does not identify
+	// an attachment to ContextMenu, which receives -1 for that press.
+	OnBelow func(p int, x, y float32, ev ui.InputEvent) bool
 }
 
 // Scroll is where an editor is scrolled, for an app showing its own scroll

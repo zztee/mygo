@@ -556,6 +556,7 @@ func (v *view) press(ev ui.InputEvent) bool {
 	if ev.Button != 0 {
 		// The context menu opens after, with what the app made of it.
 		if ev.Button == 1 && !v.overScrollbar(ev.X) {
+			v.pressBelow(ev)
 			v.pressAttachment(ev)
 		}
 		return false
@@ -580,7 +581,7 @@ func (v *view) press(ev ui.InputEvent) bool {
 		v.command(func(d *Document) { d.ToggleChecked(start) })
 		return true
 	}
-	if v.pressAttachment(ev) {
+	if v.pressBelow(ev) || v.pressAttachment(ev) {
 		return true
 	}
 	i, aff := v.positionAt(x, y)
