@@ -92,7 +92,7 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 		}
 		firstItem := true
 		for it := range m.d.Children(i) {
-			ist := ParagraphStyle{List: kind, Indent: depth + 1, Quote: st.Quote, Marker: b.Marker, Loose: !b.Tight}
+			ist := ParagraphStyle{List: kind, Indent: depth + 1, Quote: st.Quote, QuoteDepth: st.QuoteDepth, Marker: b.Marker, Loose: !b.Tight}
 			if task := m.d.Block(it).Task; task != parser.NoTask {
 				ist.List, ist.Checked = Tasks, task == parser.Checked
 			}
@@ -139,7 +139,7 @@ func (m *mdReader) block(i int, st ParagraphStyle, depth int) {
 // item adds a list item: its first paragraph in the item's style ist, and
 // what follows indented under it.
 func (m *mdReader) item(i int, ist ParagraphStyle, depth int) {
-	under := ParagraphStyle{Indent: depth + 1, Quote: ist.Quote}
+	under := ParagraphStyle{Indent: depth + 1, Quote: ist.Quote, QuoteDepth: ist.QuoteDepth}
 	first := true
 	for k := range m.d.Children(i) {
 		b := m.d.Block(k)

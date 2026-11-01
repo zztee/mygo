@@ -50,6 +50,12 @@ type EditorOptions struct {
 	// methods, as an app skips a presentation-only step of history.
 	// Direct calls to Document.Undo and Document.Redo do not call it.
 	OnHistory func(redo bool)
+	// OnReturn runs on an unmodified Return before the editor inserts a
+	// newline. Returning true takes the key; false keeps the default action.
+	// It runs without the document lock held and may change its text or
+	// selection, which the next input sees, even before another frame.
+	// ReadOnly and Shift+Return do not call it.
+	OnReturn func() bool
 	// TagStyle styles the runs that carry a Tag, as an app shows mentions
 	// or comments.
 	TagStyle func(tag string, s *ui.Span)

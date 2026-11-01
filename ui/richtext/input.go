@@ -409,6 +409,14 @@ func (v *view) key(key ui.Key, mods ui.Modifiers) bool {
 		if m != 0 {
 			return false
 		}
+		if !shift && v.opts.OnReturn != nil {
+			handled := false
+			v.command(func(*Document) { handled = v.opts.OnReturn() })
+			if handled {
+				v.reveal = true
+				return true
+			}
+		}
 		if shift && !st.CodeBlock && !v.opts.NoMarkdown {
 			// A line of its own within the paragraph.
 			v.insert(string(LineBreak))
