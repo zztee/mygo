@@ -82,6 +82,13 @@ type ListState struct {
 	// row's text while the list has the keyboard focus chooses it, and
 	// assistive technology reads it as the row's name.
 	Label func(row int) string
+	// RowMenu gives each row a context menu, including an Outline's arrow
+	// and indentation. row is its current index, flattened for an outline.
+	// It follows ContextMenu's build and Chosen semantics; a menu on a
+	// child takes precedence. The menu key or Shift+F10 opens the chosen
+	// row's menu while the list itself has the focus. Chosen callbacks
+	// run after view construction, so they can remove or reorder rows.
+	RowMenu func(m *Menu, row int)
 	// Header, when set, reports whether row i heads a section: the header
 	// of the section at the top of the list stays there while the rows of
 	// its section scroll under it, until the next header pushes it away.
@@ -386,6 +393,15 @@ func buildList(c *context, e, owner *node, s *ListState, n int, row func(i int),
 	e.list, owner.rowsOf = f, f
 	wrapElement(owner).Bind(&s.Handle)
 	s.sync(e, n)
+	if mr := &rt.menu; mr.rowOwner == e.id && mr.asked == mr.row {
+		// Resolve the displayed choice only after sync follows its stable
+		// key through changes made since the last frame.
+		if chosen := s.cursor(); s.RowMenu != nil && chosen != nil && *chosen >= 0 && *chosen < n && keyedID(e.id, f.key(*chosen)) == mr.row {
+			s.ScrollIntoView(*chosen)
+		} else {
+			mr.asked, mr.row, mr.rowOwner = 0, 0, 0
+		}
+	}
 	if s.cursor() != nil && owner == e {
 		e.Focusable()
 	}
@@ -554,6 +570,14 @@ func (f *listFrame) build(i int) *node {
 	}
 	w := coreBox(c).Key(key).Shrink(0)
 	w.listRow, w.rowIndex = true, i
+	if s.RowMenu != nil {
+		w.flags |= flagContextMenu
+		if c.rt.menu.asked == w.id || c.rt.menu.chosen == w.id {
+			// A menu command can change the row count or its backing slice.
+			// Finish every row builder before letting it mutate that data.
+			w.afterConstruction(func() { w.buildMenu(false, func(m *Menu) { s.RowMenu(m, i) }) })
+		}
+	}
 	if s.Label != nil {
 		w.Label(s.Label(i))
 	}

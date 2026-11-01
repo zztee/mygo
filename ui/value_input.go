@@ -371,6 +371,12 @@ func (n *node) afterInput(fn func()) {
 	n.c.rt.afterInputs = append(n.c.rt.afterInputs, inputAction{node: n, fn: fn, building: n.c.rt.building})
 }
 
+// afterConstruction defers an action until the whole view is built. A
+// negative depth waits for applyAllInputs rather than a constructor's end.
+func (n *node) afterConstruction(fn func()) {
+	n.c.rt.afterInputs = append(n.c.rt.afterInputs, inputAction{node: n, fn: fn, building: -1})
+}
+
 // SetChanged reports the element's value as changed in this build pass,
 // as a widget of your own whose input changed what it edits: Changed
 // returns true for it, as for the widgets' own.

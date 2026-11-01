@@ -249,6 +249,8 @@ type menuState struct {
 	chosen               uint64
 	choice               int
 	label                string
+	// row anchors a keyboard row menu after its row has been revealed.
+	row, rowOwner uint64
 }
 
 // shownMenu is a context menu built for the element id. commands are the
@@ -299,7 +301,7 @@ func (rt *engine) menuTarget(chain []uint64) *state {
 // focus.
 func (rt *engine) askMenu(s *state, x, y float32, button bool) {
 	mr := &rt.menu
-	mr.asked, mr.x, mr.y, mr.button, mr.text = s.id, x, y, button, 0
+	mr.asked, mr.x, mr.y, mr.button, mr.text, mr.row, mr.rowOwner = s.id, x, y, button, 0, 0, 0
 	// The menu takes the press: the release goes to it.
 	if rt.pressed != nil {
 		rt.pressed.pressed = false
@@ -375,7 +377,39 @@ func (rt *engine) menuRelease() bool {
 // text input's caret, or the element's top. It reports whether there was
 // one.
 func (rt *engine) menuKey() bool {
-	s := rt.menuTarget(rt.focusChain())
+	chain := rt.focusChain()
+	// Lists keep the focus on their owner while the keys choose rows.
+	// Route their menu key through that row without changing the focus;
+	// a child with the focus still gets its own menu, as a text input does.
+	var focused *node
+	var find func(*node)
+	find = func(e *node) {
+		if e.id == rt.focused {
+			focused = e
+			return
+		}
+		for child := e.first; child != nil && focused == nil; child = child.next {
+			find(child)
+		}
+	}
+	if rt.c.root != nil {
+		find(rt.c.root)
+	}
+	if f := focused.rowsOfElement(); f != nil && f.s.RowMenu != nil && !focused.disabled() {
+		if s := f.s; s.cursor() != nil && s.selRow >= 0 && s.selRow < f.n {
+			// Events arrive before the view synchronizes current data. Use
+			// the displayed key without calling an app's Key on old indices.
+			var key any = s.selRow
+			if s.Key != nil {
+				key = s.selKey
+			}
+			id := keyedID(f.e.id, key)
+			rt.askMenu(f.owner.st, 0, 0, false)
+			rt.menu.asked, rt.menu.row, rt.menu.rowOwner = id, id, f.e.id
+			return true
+		}
+	}
+	s := rt.menuTarget(chain)
 	if s == nil {
 		return false
 	}
@@ -447,6 +481,17 @@ func (rt *engine) showMenu() {
 		return
 	}
 	rt.menu.pending = nil
+	if rt.menu.row == p.id {
+		rt.menu.row, rt.menu.rowOwner = 0, 0
+		s := rt.states[p.id]
+		if s == nil || s.seen != rt.frame || s.flags&flagDisabled != 0 {
+			return
+		}
+		p.x, p.y = s.vx, s.vy+min(s.vh, 32)
+		if s.rtl {
+			p.x += s.vw
+		}
+	}
 	rt.host.popupMenu(p.menu, p.x, p.y, func(id int) { rt.menuChosen(p, id) })
 }
 
