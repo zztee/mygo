@@ -52,6 +52,16 @@ func (v *view) replace(start, end int, s string) {
 		start = mapPosition(start, c.start, c.oldEnd-c.start, c.newEnd-c.start, false)
 		end = mapPosition(end, c.start, c.oldEnd-c.start, c.newEnd-c.start, true)
 	}
+	// An empty commit at a caret changes neither text nor history. An
+	// empty replacement of a selection still deletes that selection.
+	if start == end && s == "" {
+		v.selAnchor, v.caret = start, start
+		v.lockedPublish()
+		v.affinity = ui.TextDownstream
+		v.hasDesired = false
+		v.reveal = true
+		return
+	}
 	v.lockedPublish()
 	attrs := typingAttributes(d.text, start, end)
 	if d.typing != nil {
