@@ -660,6 +660,7 @@ func (rt *engine) endPass() {
 	}
 	rt.clickLater = rt.clickLater[:0]
 	rt.menu.chosen = 0
+	rt.menu.target = nil
 	// A shortcut the view did not ask for again, as it changed: what
 	// this frame built may take the key (settleKeys).
 	rt.unrouted = append(rt.unrouted, rt.delivered...)

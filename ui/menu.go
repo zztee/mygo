@@ -88,9 +88,16 @@ func (e *node) buildMenu(button bool, build func(m *Menu)) {
 			commands = run.commands
 		}
 		rt.openMenu(e.id, button, pm, run.labels, commands)
+		if mr.pending != nil {
+			mr.pending.targets = run.targets
+		}
 	case mr.chosen == e.id && mr.chosenButton == button:
 		mr.chosen = 0
-		run := &menuRun{choice: mr.choice, label: mr.label}
+		run := &menuRun{choice: mr.choice, label: mr.label, target: mr.target}
+		mr.target = nil
+		if e.disabled() {
+			break
+		}
 		build(&Menu{run: run, rt: rt, text: rt.states[mr.chosenText]})
 		if run.chosen {
 			// The choice may change what was built before: build again.
@@ -120,6 +127,8 @@ type menuRun struct {
 	// commands are the editing commands of EditItems' items by place, ""
 	// for the others, when collecting.
 	commands []string
+	targets  map[int]any
+	target   any
 	choice   int
 	label    string
 	chosen   bool // an item reported the choice
@@ -170,6 +179,32 @@ func (m *Menu) EditItems() {
 	}
 }
 
+// EditItemsFor adds the platform's editing items for an application-owned
+// editor and returns the command chosen, or an empty string. target is a
+// comparable identity of the document; a choice is discarded if it changes
+// while the menu is open. enabled reports whether each command can run now,
+// both when opening the menu and when taking its choice. A read-only editor
+// shows only Copy and Select All. Commands use the names of InputCommand.
+func (m *Menu) EditItemsFor(target any, readOnly bool, enabled func(string) bool) string {
+	var chosen string
+	for _, c := range m.rt.editingCommands(readOnly, enabled) {
+		if c.name == "" {
+			m.Separator()
+			continue
+		}
+		it := m.Item(c.label).Disabled(!c.on)
+		if m.run.collect {
+			if m.run.targets == nil {
+				m.run.targets = make(map[int]any)
+			}
+			m.run.targets[it.seq] = target
+		} else if m.run.target == target && it.Chosen() {
+			chosen = c.name
+		}
+	}
+	return chosen
+}
+
 // Item adds an item showing label.
 func (m *Menu) Item(label string) *MenuItem { return m.add(label, platform.MenuItemNormal) }
 
@@ -181,7 +216,7 @@ func (m *Menu) Separator() { m.add("", platform.MenuItemSeparator) }
 func (m *Menu) Submenu(label string, build func(m *Menu)) *MenuItem {
 	it := m.add(label, platform.MenuItemSubmenu)
 	it.sub = true
-	sub := &Menu{run: m.run}
+	sub := &Menu{run: m.run, rt: m.rt, text: m.text}
 	if it.p != nil {
 		it.p.Submenu = &platform.Menu{}
 		sub.menu = it.p.Submenu
@@ -239,6 +274,7 @@ type menuState struct {
 	// may be inside the element with the menu, and chosenText the one the
 	// item chosen was from.
 	text, chosenText uint64
+	target           any
 	// button is set when the menu asked for is a menu button's, and
 	// chosenButton when the item chosen is from one.
 	button, chosenButton bool
@@ -261,6 +297,7 @@ type shownMenu struct {
 	menu     *platform.Menu
 	labels   []string
 	commands []string
+	targets  map[int]any
 	x, y     float32
 	// text is the text the menu opened on, which takes its commands.
 	text uint64
@@ -517,6 +554,7 @@ func (rt *engine) menuChosen(p *shownMenu, id int) {
 	} else {
 		mr := &rt.menu
 		mr.chosen, mr.chosenButton, mr.choice, mr.label, mr.chosenText = p.id, p.button, id, p.labels[id-1], p.text
+		mr.target = p.targets[id]
 	}
 	rt.requestFrame()
 }
@@ -555,29 +593,41 @@ func (rt *engine) editCommands(s *state) []editItem {
 	if s.textScope != 0 && rt.selection.scope == s.textScope {
 		_, _, selected = rt.textSelectionBounds()
 	}
-	type command = editItem
+	return rt.editingCommands(ed.readOnly, func(name string) bool {
+		switch name {
+		case "undo":
+			return len(ed.undo) > 0
+		case "cut", "copy":
+			return selected && !ed.password
+		case "delete":
+			return selected
+		case "selectAll":
+			return ed.buf.n > 0
+		}
+		return true
+	})
+}
+
+func (rt *engine) editingCommands(readOnly bool, enabled func(string) bool) []editItem {
 	texts := l10n.In(rt.lang)
-	var (
-		undo      = command{texts.Undo(), "undo", len(ed.undo) > 0}
-		cut       = command{texts.Cut(), "cut", selected && !ed.password}
-		copyText  = command{texts.Copy(), "copy", selected && !ed.password}
-		paste     = command{texts.Paste(), "paste", true}
-		del       = command{texts.Delete(), "delete", selected}
-		selectAll = command{texts.SelectAll(), "selectAll", ed.buf.n > 0}
-		separator = command{}
-		commands  []command
-	)
+	item := func(label, name string) editItem { return editItem{label, name, enabled(name)} }
+	undo := item(texts.Undo(), "undo")
+	cut := item(texts.Cut(), "cut")
+	copyText := item(texts.Copy(), "copy")
+	paste := item(texts.Paste(), "paste")
+	del := item(texts.Delete(), "delete")
+	selectAll := item(texts.SelectAll(), "selectAll")
+	separator := editItem{}
 	switch {
-	case ed.readOnly:
-		commands = []command{copyText, separator, selectAll}
+	case readOnly:
+		return []editItem{copyText, separator, selectAll}
 	case runtime.GOOS == "darwin":
-		commands = []command{cut, copyText, paste, separator, selectAll}
+		return []editItem{cut, copyText, paste, separator, selectAll}
 	case runtime.GOOS == "windows":
-		commands = []command{undo, separator, cut, copyText, paste, del, separator, selectAll}
+		return []editItem{undo, separator, cut, copyText, paste, del, separator, selectAll}
 	default:
-		commands = []command{cut, copyText, paste, del, separator, selectAll}
+		return []editItem{cut, copyText, paste, del, separator, selectAll}
 	}
-	return commands
 }
 
 // accelerator writes a key with modifiers as menus take it, as in

@@ -735,5 +735,26 @@ func (v *view) menu(m *ui.Menu) {
 	if v.opts.ContextMenu != nil {
 		v.opts.ContextMenu(m, v.menuAt-1)
 	}
-	m.EditItems()
+	v.sync()
+	if name := m.EditItemsFor(v.doc, v.opts.ReadOnly, v.canEditCommand); name != "" {
+		v.editCommand(name)
+		v.publish()
+	}
+}
+
+func (v *view) canEditCommand(name string) bool {
+	a, b := v.selection()
+	switch name {
+	case "copy":
+		return a != b
+	case "selectAll":
+		return v.shown.Len() > 0
+	case "undo":
+		return !v.opts.ReadOnly && v.doc.CanUndo()
+	case "cut", "delete":
+		return !v.opts.ReadOnly && a != b
+	case "paste":
+		return !v.opts.ReadOnly
+	}
+	return false
 }
