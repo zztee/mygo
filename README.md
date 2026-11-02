@@ -111,3 +111,14 @@ Read the [documentation](docs/README.md).
 ## License
 
 MIT
+
+### System spelling
+
+`mygo.NewSpellChecker` creates an opt-in document session after `App.Run`.
+On macOS it uses NSSpellChecker's background spelling requests. `Check`
+returns UTF-8 byte ranges; pass a context and discard results for stale
+document revisions. Apps choose which paragraphs and Markdown ranges to
+check. `Suggestions`, `Learn`, `Unlearn`, `HasLearned`, and `Ignore` support
+a spelling context menu. Learning changes the system dictionary; ignoring
+is local to the session. Close the checker with its document. Linux, Windows
+and browsers return `errors.ErrUnsupported`; no dictionary is installed.

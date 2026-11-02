@@ -204,6 +204,9 @@ func (a *Application) prepareQuit() bool {
 	// error handling may Flush explicitly from a quit listener.
 	_ = Clipboard.Flush()
 	stopCookieCalls()
+	if linkedSpellCheckers != nil {
+		linkedSpellCheckers()
+	}
 	return true
 }
 

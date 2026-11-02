@@ -26,6 +26,9 @@ var ErrNoReply = errors.New("fake: no reply")
 
 // Backend is a fake platform backend.
 type Backend struct {
+	// SpellCheckerFactory injects an opt-in system spelling session. Set on the main thread.
+	SpellCheckerFactory func() (platform.SpellChecker, error)
+
 	h      platform.AppHandler
 	mainID uint64
 	signal chan struct{}
