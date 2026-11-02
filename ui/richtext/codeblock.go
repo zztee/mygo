@@ -1,6 +1,46 @@
 package richtext
 
-import "github.com/egoist/mygo/ui"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+)
+
+// codeNumber returns the logical line number within a block of code.
+func (v *view) codeNumber(p int) int {
+	for i := len(v.codeNumbers); i <= p; i++ {
+		n := 0
+		if v.para(i).style.CodeBlock {
+			n = 1
+			if i > 0 && sameCode(v.para(i-1), v.para(i)) {
+				n = v.codeNumbers[i-1] + 1
+			}
+		}
+		v.codeNumbers = append(v.codeNumbers, n)
+	}
+	return v.codeNumbers[p]
+}
+
+// codeNumberGutter reserves room for the widest number and a gap to the code.
+func (v *view) codeNumberGutter(digits int) float32 {
+	font := v.paraFont(ParagraphStyle{CodeBlock: true})
+	lay := ui.ShapeText(strings.Repeat("9", digits), font, 0)
+	w, _ := lay.Size()
+	return w + font.Size*0.75
+}
+
+// paintCodeNumber draws one number beside the first visual line only.
+func (v *view) paintCodeNumber(p *ui.Painter, i int, pv *paraView, x, y float32) {
+	n := v.codeNumber(i)
+	font := v.paraFont(v.para(i).style)
+	if pv.codeLabel == nil || pv.codeNumber != n {
+		pv.codeNumber, pv.codeLabel = n, ui.ShapeText(strconv.Itoa(n), font, 0)
+	}
+	w, _ := pv.codeLabel.Size()
+	first := pv.layout.CaretAt(ui.TextCaretPosition{})
+	p.TextLayout(pv.codeLabel, x-font.Size*0.75-w, y+first.Y, v.look.Muted)
+}
 
 // CodeBlockBox returns the box of the block of code holding rune i, the
 // paragraphs of code next to each other that paint one background, in the

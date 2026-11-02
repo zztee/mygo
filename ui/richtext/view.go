@@ -76,6 +76,10 @@ type EditorOptions struct {
 	// the editor knows. Without it, the block keeps the colors its text
 	// was given.
 	Syntax func(kind editor.TokenKind) ui.Color
+	// CodeLineNumbers shows the logical line numbers of each block of code,
+	// starting at 1. Wrapped continuations have no number. The numbers are
+	// decorations: they do not change the text, clipboard or accessibility.
+	CodeLineNumbers bool
 	// Theme sets how the text looks: colors, code, headings, lists and
 	// quotations. What it leaves zero, and all of it when nil, takes the
 	// window theme's DefaultTheme.
@@ -384,6 +388,10 @@ type view struct {
 	// text of numbersOf.
 	numbers   map[int]int
 	numbersOf Text
+	// codeNumbers caches the logical line numbers through its last paragraph.
+	// An edit keeps the prefix before the first paragraph it changes.
+	codeNumbers []int
+	codeGutter  float32
 	// lex[i] is the tokenizer state after paragraph i, for the
 	// paragraphs before the first an edit changed.
 	lex []uint64
@@ -409,6 +417,8 @@ type paraView struct {
 	// marker is the list marker painted beside the paragraph, laid out.
 	marker       string
 	markerLayout *ui.TextLayout
+	codeNumber   int
+	codeLabel    *ui.TextLayout
 	id           uint64
 	runs         *attrRun
 	nruns        int
@@ -574,6 +584,7 @@ func (v *view) lockedSync() (change, bool) {
 			v.shown = d.text
 			v.paras = make([]paraView, d.text.ParagraphCount())
 			v.lex = v.lex[:0]
+			v.codeNumbers = v.codeNumbers[:0]
 			v.laid = 0
 			v.resetHeights()
 			v.relay = v.relay[:0]
@@ -672,6 +683,7 @@ func (v *view) unlay(p int) {
 // of now, without layouts.
 func (v *view) replaced(c change, now Text) {
 	pa, pz := v.shown.paraAt(c.start), v.shown.paraAt(c.oldEnd)
+	v.codeNumbers = v.codeNumbers[:min(len(v.codeNumbers), pa)]
 	npz := now.paraAt(c.newEnd)
 	// The lines of code after the change may start in another state.
 	v.lex = v.lex[:min(len(v.lex), pa)]
@@ -758,13 +770,23 @@ func (v *view) paraFont(st ParagraphStyle) ui.Font {
 
 // lookKey is what of the look the layouts of paragraphs are made of.
 type lookKey struct {
-	base  ui.Font
-	theme Theme
-	tags  bool
+	base       ui.Font
+	theme      Theme
+	tags       bool
+	codeDigits int
 }
 
 func (v *view) lookKey() lookKey {
-	return lookKey{base: v.base, theme: v.look.Theme, tags: v.look.tagStyle != nil}
+	digits := 0
+	if v.opts.CodeLineNumbers {
+		// A document-wide upper bound keeps the gutter aligned without
+		// scanning whole blocks whenever a line is inserted or removed.
+		digits = 2
+		for n := len(v.paras); n >= 100; n /= 10 {
+			digits++
+		}
+	}
+	return lookKey{base: v.base, theme: v.look.Theme, tags: v.look.tagStyle != nil, codeDigits: digits}
 }
 
 // heading returns the style of headings of level, from 1.
@@ -790,6 +812,9 @@ func (v *view) insets(st ParagraphStyle) (left, right float32) {
 	if st.CodeBlock {
 		left += look.size * look.CodeBlockPadding[0]
 		right += look.size * look.CodeBlockPadding[0]
+		if v.opts.CodeLineNumbers {
+			left += v.codeGutter
+		}
 	}
 	return left, right
 }
@@ -1254,6 +1279,10 @@ func (v *view) layout(w, h float32) {
 	if key := v.lookKey(); w != v.width || key != v.laidLook || v.relayAll {
 		// Another width, font or theme: every paragraph anew.
 		v.laidLook = key
+		v.codeGutter = 0
+		if key.codeDigits > 0 {
+			v.codeGutter = v.codeNumberGutter(key.codeDigits)
+		}
 		for i := range v.paras {
 			v.paras[i] = paraView{}
 		}

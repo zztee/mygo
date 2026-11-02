@@ -52,6 +52,9 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		p.TextLayout(pv.layout, x, y, look.Text)
 		v.paintAttachments(p, i, pv, x, y)
 		v.paintMarker(p, i, st, pv, x, y)
+		if st.CodeBlock && v.opts.CodeLineNumbers {
+			v.paintCodeNumber(p, i, pv, x, y)
+		}
 		if v.compose != "" && v.shown.paraAt(v.caret) == i {
 			c := v.local(i, v.caret)
 			n := len([]rune(v.compose))
