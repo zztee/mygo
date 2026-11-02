@@ -50,6 +50,15 @@ type EditorOptions struct {
 	// methods, as an app skips a presentation-only step of history.
 	// Direct calls to Document.Undo and Document.Redo do not call it.
 	OnHistory func(redo bool)
+	// OnInput offers key-down and native edit-command events before the editor.
+	// Returning true consumes the event; false keeps its default handling.
+	// It runs once on the UI thread without the document lock, with previous
+	// input published. Document methods may be called; their text and selection
+	// changes are observed before default handling and the next input event.
+	// Active compositions are not offered. Committed typing uses OnTextInput.
+	// ReadOnly still offers events so an app may handle selection and copying;
+	// the callback is responsible for honoring ReadOnly when it edits.
+	OnInput func(ui.InputEvent) bool
 	// OnReturn runs on an unmodified Return before the editor inserts a
 	// newline. Returning true takes the key; false keeps the default action.
 	// It runs without the document lock held and may change its text or

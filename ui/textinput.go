@@ -185,6 +185,37 @@ func (k TextKey) SetText(s string) {
 	}
 }
 
+// Focus immediately gives a bound control in this window the keyboard focus,
+// so text following this key goes there before another frame. It returns
+// false for a hidden, disabled or nonfocusable target, or one outside the
+// active modal, and leaves focus alone.
+// Unlike Handle.Focus, it does not queue a request for a hidden control.
+// It is valid only while the OnTextKey callback runs.
+func (k TextKey) Focus(target Handle) bool {
+	ed := k.valid()
+	if ed.client == nil {
+		return false
+	}
+	rt := ed.client.rt
+	b := (&target).binding(rt, false)
+	if b == nil || b.closed || b.id == 0 || !rt.windowFocus() ||
+		b.element.owner != rt.arena || b.element.gen != rt.arena.generation {
+		return false
+	}
+	s := rt.states[b.id]
+	if s == nil || s.seen != rt.frame || s.pass != rt.pass ||
+		s.flags&flagFocusable == 0 || s.flags&flagDisabled != 0 ||
+		!slices.Contains(rt.focusOrder, b.id) || rt.modal != 0 && rt.scopeOf(b.id) != rt.modal {
+		return false
+	}
+	rt.focused = b.id
+	b.requested = false
+	rt.blinkStart = rt.now()
+	rt.consumed = true
+	rt.requestFrame()
+	return true
+}
+
 // Lines makes a text area as high as its text, wrapped at its width, from
 // min lines up to max, past which it scrolls, as a message field grows with
 // what is typed: TextArea(c, &draft).Lines(1, 8). Without it, a text area is

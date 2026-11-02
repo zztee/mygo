@@ -19,6 +19,9 @@ func (v *view) input(ev ui.InputEvent) bool {
 		v.composing = false
 	}
 	defer v.publish()
+	if v.offerInput(ev) {
+		return true
+	}
 	switch ev.Kind {
 	case ui.InputKeyDown:
 		v.menuAt = 0 // a menu the keyboard opens is not an attachment's
@@ -67,6 +70,29 @@ func (v *view) input(ev ui.InputEvent) bool {
 		return v.scroll != before
 	}
 	return false
+}
+
+// offerInput publishes the selection before app commands and catches up with
+// their edits before default handling or the next event. The callback runs
+// once, without the document lock, and never sees an active composition.
+func (v *view) offerInput(ev ui.InputEvent) bool {
+	if v.opts.OnInput == nil || v.composing || v.compose != "" ||
+		(ev.Kind != ui.InputKeyDown && ev.Kind != ui.InputCommand) {
+		return false
+	}
+	v.publish()
+	before := v.doc.Version()
+	handled := v.opts.OnInput(ev)
+	if v.doc.Version() != before {
+		v.changed = true
+	}
+	v.sync()
+	if handled {
+		v.mode, v.coalesce = newStep, false
+		v.blinkStart = ev.Time
+		v.reveal = true
+	}
+	return handled
 }
 
 // moveTo puts the caret at i, extending the selection or not.
