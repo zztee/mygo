@@ -108,6 +108,15 @@ type Attachment struct {
 	// Name describes the attachment to assistive technology, and stands
 	// for it in plain text: an image's alternative text, a file's name.
 	Name string
+	// AccessibleText replaces the object's U+FFFC in the editor's accessible
+	// value. Empty keeps U+FFFC, as for an attachment without this option.
+	// Offsets in that value count runes of this text. A nonempty accessible
+	// selection touching its interior selects the whole object; a caret
+	// inside it snaps before the object. The document, native input-method
+	// ranges, clipboard and undo still use the original one-character object.
+	// Like Draw and Data, this presentation is kept within the process and
+	// is not serialized to the clipboard.
+	AccessibleText string
 	// URL is where the attachment comes from, as a file's or an image's,
 	// which HTML and Markdown write for it.
 	URL string

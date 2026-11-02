@@ -58,8 +58,7 @@ func (v *view) input(ev ui.InputEvent) bool {
 	case ui.InputPointerUp:
 		return v.release(ev)
 	case ui.InputSelect:
-		n := v.shown.Len()
-		v.selAnchor, v.caret = max(0, min(ev.Start, n)), max(0, min(ev.End, n))
+		v.selAnchor, v.caret = v.shown.accessible().selection(ev.Start, ev.End)
 		v.affinity = ui.TextDownstream
 		v.reveal = true
 		return true

@@ -1393,8 +1393,10 @@ func (v *view) selection() (int, int) { return min(v.selAnchor, v.caret), max(v.
 // access describes the editor to assistive technology: its text, and the
 // selection.
 func (v *view) access(n *platform.AccessNode) {
-	n.Value = v.shown.String()
-	n.SelStart, n.SelEnd = v.selection()
+	m := v.shown.accessible()
+	n.Value = m.value
+	a, z := v.selection()
+	n.SelStart, n.SelEnd = m.offset(a), m.offset(z)
 	n.States |= platform.AccessMultiline
 	if v.opts.ReadOnly {
 		n.States |= platform.AccessReadOnly
@@ -1403,6 +1405,10 @@ func (v *view) access(n *platform.AccessNode) {
 		n.Placeholder = v.opts.Placeholder
 	}
 	n.TextRuns = v.accessRuns(n.TextRuns[:0])
+	for i := range n.TextRuns {
+		r := &n.TextRuns[i]
+		r.Start, r.End = m.offset(r.Start), m.offset(r.End)
+	}
 }
 
 // accessRuns appends the runs of the text that have formats, as screen
