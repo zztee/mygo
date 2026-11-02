@@ -52,6 +52,13 @@ type EditorOptions struct {
 	// what to insert, as an app leaves out what its files cannot keep.
 	// Plain text and Paste and Match Style do not pass through it.
 	OnPaste func(Text) Text
+	// OnPasteHTML replaces ParseHTML for an external HTML clipboard value.
+	// The string is untrusted, unmodified clipboard input. It runs on the UI
+	// thread before OnPaste, without the document lock; it must only transform
+	// the value, without blocking I/O or changing the document. An empty result
+	// replaces the selection with no text. Internal rich copies take priority;
+	// plain text and Paste and Match Style bypass this callback.
+	OnPasteHTML func(string) Text
 	// OnCopy, when set, receives the current displayed text and the nonempty
 	// selection's ordered rune offsets. It returns the selection to put on
 	// the clipboard as rich text, HTML and plain text. The text is immutable;

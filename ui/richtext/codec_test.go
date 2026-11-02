@@ -385,3 +385,86 @@ e\_mail vis{\v hid}ible\par alpha\cell beta\cell\row {\field{\*\fldinst HYPERLIN
 		t.Errorf("link %q", l)
 	}
 }
+
+// An app gets the original HTML before the default parser loses structures
+// such as table cells. Its result still takes the ordinary paste history path.
+func TestOnPasteHTML(t *testing.T) {
+	const fragment = `<html><body><!--StartFragment--><p>Before</p><table><tbody><tr><th>Name</th><th>Count</th></tr><tr><td colspan="2">Wide</td></tr></tbody></table><img src="https://example.invalid/a.png" alt="Chart"><script>ignored()</script><!--EndFragment--></body></html>`
+	html := transfer.Bytes(transfer.HTML, []byte(fragment))
+	plain := transfer.Bytes(transfer.Text, []byte("plain"))
+	for _, tc := range []struct {
+		name                  string
+		data                  transfer.Data
+		match, hook, empty    bool
+		want                  string
+		htmlCalls, pasteCalls int
+	}{
+		{name: "HTML", data: transfer.New(transfer.NewItem(html, plain)), hook: true, want: "converted 甲🙂", htmlCalls: 1, pasteCalls: 1},
+		{name: "default", data: transfer.New(transfer.NewItem(transfer.Bytes(transfer.HTML, []byte("<b>bold</b>")), plain)), want: "bold", pasteCalls: 1},
+		{name: "matching style", data: transfer.New(transfer.NewItem(html, plain)), match: true, hook: true, want: "plain"},
+		{name: "plain text", data: transfer.TextData("plain"), hook: true, want: "plain"},
+		{name: "rich copy priority", data: clipboardData(NewText("rich")), hook: true, want: "rich", pasteCalls: 1},
+		{name: "invalid rich copy", data: transfer.New(transfer.NewItem(transfer.Bytes(Format, []byte("invalid")), html)), hook: true, want: "converted 甲🙂", htmlCalls: 1, pasteCalls: 1},
+		{name: "Markdown", data: transfer.New(transfer.NewItem(transfer.Bytes(transfer.Markdown, []byte("**bold**")))), hook: true, want: "bold", pasteCalls: 1},
+		{name: "RTF", data: transfer.New(transfer.NewItem(transfer.Bytes(RTF, []byte(`{\rtf1 plain}`)))), hook: true, want: "plain", pasteCalls: 1},
+		{name: "empty HTML", data: transfer.New(transfer.NewItem(transfer.Bytes(transfer.HTML, nil), plain)), hook: true, want: "plain"},
+		{name: "empty result", data: transfer.New(transfer.NewItem(html)), hook: true, empty: true, htmlCalls: 1, pasteCalls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := NewText("axb")
+			doc := NewDocument(original)
+			htmlCalls, pasteCalls := 0, 0
+			opts := EditorOptions{OnPaste: func(text Text) Text {
+				pasteCalls++
+				if text.String() != tc.want {
+					t.Fatalf("OnPaste received %q, want %q", text.String(), tc.want)
+				}
+				return text
+			}}
+			if tc.hook {
+				opts.OnPasteHTML = func(raw string) Text {
+					htmlCalls++
+					if raw != fragment {
+						t.Fatalf("HTML changed before callback: %q", raw)
+					}
+					if !doc.Text().Equal(original) {
+						t.Fatal("document changed before conversion")
+					}
+					if tc.empty {
+						return Text{}
+					}
+					return NewText("converted 甲🙂")
+				}
+			}
+			tt := ui.NewTester(func(c *ui.Context) { EditorBase(c, doc, opts).Fill() }, 500, 400)
+			tt.Press(250, 380)
+			tt.Release(250, 380)
+			tt.SetClipboardData(tc.data)
+			doc.SetSelection(1, 2)
+			tt.Frame()
+			if tc.match {
+				tt.Command("pasteAndMatchStyle")
+			} else {
+				tt.Key(ui.Cmd, ui.KeyV)
+			}
+			if got := doc.Text().String(); got != "a"+tc.want+"b" {
+				t.Fatalf("paste %q", got)
+			}
+			if htmlCalls != tc.htmlCalls || pasteCalls != tc.pasteCalls {
+				t.Fatalf("calls HTML=%d paste=%d", htmlCalls, pasteCalls)
+			}
+			pasted := doc.Text()
+			tt.Key(ui.Cmd, ui.KeyZ)
+			if !doc.Text().Equal(original) || doc.CanUndo() {
+				t.Fatal("paste did not undo in one step")
+			}
+			tt.Command("redo")
+			if !doc.Text().Equal(pasted) {
+				t.Fatal("redo changed converted text")
+			}
+			if htmlCalls != tc.htmlCalls || pasteCalls != tc.pasteCalls {
+				t.Fatal("history reran conversion")
+			}
+		})
+	}
+}

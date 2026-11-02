@@ -223,7 +223,12 @@ func (v *view) paste(matchStyle bool) {
 		}
 		if !ok {
 			if b, err := d.Read(transfer.HTML); err == nil && len(b) > 0 {
-				t, ok = ParseHTML(string(b)), true
+				if v.opts.OnPasteHTML != nil {
+					t = v.opts.OnPasteHTML(string(b))
+				} else {
+					t = ParseHTML(string(b))
+				}
+				ok = true
 			}
 		}
 		if !ok {
