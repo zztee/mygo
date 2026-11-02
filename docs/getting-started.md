@@ -108,7 +108,8 @@ With a web frontend, it also writes `src/mygo.ts` and starts the Vite dev
 server, from which the development app loads its pages: edit `src/main.ts`
 or `src/style.css` and Vite updates the page right away. Development builds
 have the web inspector: right-click the page and choose Inspect Element
-(Inspect on Windows), or call `win.Page().OpenDevTools()`.
+(Inspect on Windows), or call `win.Page().OpenDevTools()`. On macOS use
+Safari's Develop menu instead (macOS 13.3 or later).
 
 On macOS the development app is a real app bundle, `My App Dev` with the
 identifier of the app plus `.dev`, so that it keeps its data, preferences

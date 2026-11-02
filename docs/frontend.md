@@ -378,5 +378,7 @@ before the page's own scripts, once `window.mygo` exists.
 
 Development builds have the web inspector: right-click a page and choose
 Inspect Element (Inspect on Windows), or call `win.Page().OpenDevTools()`.
+On macOS, which has no public API for either, attach Safari's Web Inspector
+from its Develop menu (macOS 13.3 or later); `OpenDevTools` does nothing there.
 Production builds do not, unless built with `mygo build -debug` or a window's
 page sets `DevTools: mygo.DevToolsEnabled` in `WindowOptions.Page`.

@@ -58,8 +58,10 @@ type window struct {
 	web      id
 	delegate id
 	ucc      id
-	effect   id
-	parent   *window
+	// defaultUA is navigator.userAgent, read after the first navigation.
+	defaultUA string
+	effect    id
+	parent    *window
 	// flyout is how a flyout (WindowOptions.Flyout) was placed last, at
 	// flyoutSize.
 	flyout     platform.Flyout
@@ -340,8 +342,6 @@ func (w *window) createWebView(content NSRect) {
 		}
 	}
 	prefs := send(cfg, "preferences")
-	send(prefs, "setValue:forKey:", uintptr(nsBool(o.DevTools)), uintptr(nsString("developerExtrasEnabled")))
-	send(prefs, "setValue:forKey:", uintptr(nsBool(true)), uintptr(nsString("allowFileAccessFromFileURLs")))
 	if respondsTo(prefs, "setElementFullscreenEnabled:") {
 		send(prefs, "setElementFullscreenEnabled:", 1)
 	}
@@ -359,12 +359,14 @@ func (w *window) createWebView(content NSRect) {
 	send(w.web, "setUIDelegate:", uintptr(w.delegate))
 	send(w.web, "setAutoresizingMask:", nsViewWidthHeightSizable)
 	if o.Transparent || o.BackgroundColor != nil || o.Vibrancy != "" {
-		// Let the window color show until the page paints.
-		send(w.web, "setValue:forKey:", uintptr(nsBool(false)), uintptr(nsString("drawsBackground")))
-		if o.BackgroundColor != nil && respondsTo(w.web, "setUnderPageBackgroundColor:") {
-			send(w.web, "setUnderPageBackgroundColor:", uintptr(nsColor(*o.BackgroundColor)))
-		}
+		// Let the window color show until the page paints, with the
+		// underPageBackgroundColor of macOS 12: clear unless the window
+		// has a color.
+		w.setUnderPage(o.BackgroundColor)
 	}
+	// With DevTools the page can be inspected from Safari (Develop menu,
+	// macOS 13.3). Older systems get no inspector: the one that ran inside
+	// the window needed private WebKit API.
 	if respondsTo(w.web, "setInspectable:") {
 		send(w.web, "setInspectable:", boolArg(o.DevTools))
 	}
@@ -801,11 +803,21 @@ func (w *window) SetBackgroundColor(c platform.Color) {
 		} else {
 			send(w.win, "setBackgroundColor:", uintptr(nsColor(c)))
 		}
-		send(w.web, "setValue:forKey:", uintptr(nsBool(false)), uintptr(nsString("drawsBackground")))
-		if respondsTo(w.web, "setUnderPageBackgroundColor:") {
-			send(w.web, "setUnderPageBackgroundColor:", uintptr(nsColor(c)))
-		}
+		w.setUnderPage(&c)
 	})
+}
+
+// setUnderPage sets the color behind the page: c, or clear for nil. It needs
+// macOS 12; before it the page background stays opaque.
+func (w *window) setUnderPage(c *platform.Color) {
+	if !respondsTo(w.web, "setUnderPageBackgroundColor:") {
+		return
+	}
+	col := platform.Color{}
+	if c != nil {
+		col = *c
+	}
+	send(w.web, "setUnderPageBackgroundColor:", uintptr(nsColor(col)))
 }
 
 func (w *window) SetOpacity(v float64) { msgSetFloat(w.win, sel("setAlphaValue:"), v) }
@@ -893,7 +905,7 @@ func (w *window) SetVibrancy(material string) {
 			send(w.effect, "setAutoresizingMask:", nsViewWidthHeightSizable)
 			// Behind the page and a docked inspector.
 			send(w.view, "addSubview:positioned:relativeTo:", uintptr(w.effect), ^uintptr(0), 0) // NSWindowBelow
-			send(w.web, "setValue:forKey:", uintptr(nsBool(false)), uintptr(nsString("drawsBackground")))
+			w.setUnderPage(nil)
 		}
 		send(w.effect, "setMaterial:", m)
 	})
@@ -1135,40 +1147,40 @@ func (w *window) SetUserAgent(ua string) {
 	})
 }
 
+// UserAgent returns the custom user agent, else the default one, which
+// WebKit gives only to scripts: it is read from navigator.userAgent, so it
+// is empty until the first evaluation has finished.
 func (w *window) UserAgent() string {
 	var s string
-	withPool(func() {
-		s = goString(send(w.web, "customUserAgent"))
-		if s == "" && respondsTo(w.web, "_userAgent") {
-			s = goString(send(w.web, "_userAgent"))
-		}
-	})
+	withPool(func() { s = goString(send(w.web, "customUserAgent")) })
+	if s == "" {
+		s = w.defaultUA
+	}
 	return s
 }
 
-func (w *window) inspector() id {
-	if !w.opts.DevTools || !respondsTo(w.web, "_inspector") {
-		return 0
-	}
-	return send(w.web, "_inspector")
+// readDefaultUserAgent asks the page for navigator.userAgent.
+func (w *window) readDefaultUserAgent() {
+	withPool(func() {
+		blk := newBlock(func(_ objc.Block, result id, err id) {
+			if err == 0 && result != 0 {
+				w.defaultUA = goString(result)
+			}
+		})
+		defer blk.Release()
+		send(w.web, "evaluateJavaScript:completionHandler:", uintptr(nsString("navigator.userAgent")), uintptr(blk))
+	})
 }
 
-func (w *window) OpenDevTools() {
-	if in := w.inspector(); in != 0 {
-		send(in, "show")
-	}
-}
+// OpenDevTools does nothing: WebKit has no public API to show its inspector.
+// Attach Safari's Web Inspector instead (Develop menu, with DevTools on).
+func (w *window) OpenDevTools() {}
 
-func (w *window) CloseDevTools() {
-	if in := w.inspector(); in != 0 {
-		send(in, "close")
-	}
-}
+// CloseDevTools does nothing, see OpenDevTools.
+func (w *window) CloseDevTools() {}
 
-func (w *window) IsDevToolsOpened() bool {
-	in := w.inspector()
-	return in != 0 && respondsTo(in, "isVisible") && sendBool(in, "isVisible")
-}
+// IsDevToolsOpened reports false: an inspector in Safari is not visible here.
+func (w *window) IsDevToolsOpened() bool { return false }
 
 func (w *window) CapturePage(cb func([]byte, error)) {
 	withPool(func() {
@@ -1686,6 +1698,9 @@ func registerWindowClasses() {
 			}),
 			method("webView:didFinishNavigation:", func(self id, _ objc.SEL, web, nav id) {
 				if w := b().windowFor(self); w != nil {
+					if w.defaultUA == "" {
+						w.readDefaultUserAgent()
+					}
 					w.h.LoadFinished()
 				}
 			}),

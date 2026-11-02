@@ -349,6 +349,9 @@ var cursorSelectors = map[platform.Cursor]string{
 var cursorFallbacks = map[platform.Cursor]string{
 	platform.CursorResizeColumn: "resizeLeftRightCursor",
 	platform.CursorResizeRow:    "resizeUpDownCursor",
+	// No public diagonal cursors before macOS 15.
+	platform.CursorResizeNWSE: "resizeLeftRightCursor",
+	platform.CursorResizeNESW: "resizeLeftRightCursor",
 }
 
 // applyCursor sets the content's cursor, unless the pointer is over a
@@ -366,21 +369,17 @@ func (s *surface) applyCursor() {
 }
 
 // nsCursor returns the NSCursor of c. The diagonal resize cursors are the
-// frame resize cursors of macOS 15, else AppKit's own older ones.
+// frame resize cursors of macOS 15; older systems have no public ones, so
+// they get the horizontal or vertical resize cursor.
 func nsCursor(c platform.Cursor) id {
 	cls := class("NSCursor")
 	if c == platform.CursorResizeNWSE || c == platform.CursorResizeNESW {
-		corner, older := uintptr(1|2), "_windowResizeNorthWestSouthEastCursor" // top left
+		corner := uintptr(1 | 2) // top left
 		if c == platform.CursorResizeNESW {
-			corner, older = 1|8, "_windowResizeNorthEastSouthWestCursor" // top right
+			corner = 1 | 8 // top right
 		}
 		if respondsTo(cls, "frameResizeCursorFromPosition:inDirections:") {
 			if cur := send(cls, "frameResizeCursorFromPosition:inDirections:", corner, 1|2); cur != 0 { // inward and outward
-				return cur
-			}
-		}
-		if respondsTo(cls, older) {
-			if cur := send(cls, older); cur != 0 {
 				return cur
 			}
 		}
@@ -392,7 +391,7 @@ func nsCursor(c platform.Cursor) id {
 	if !ok {
 		name = "arrowCursor"
 	}
-	if !respondsTo(cls, name) {
+	if !ok || !respondsTo(cls, name) {
 		if name, ok = cursorFallbacks[c]; !ok {
 			name = "arrowCursor"
 		}

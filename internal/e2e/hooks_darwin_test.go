@@ -105,15 +105,10 @@ func collectionBehavior(w *mygo.Window) (behavior uint, supported bool) {
 	return behavior, true
 }
 
-func dockDevTools(w *mygo.Window) (ok bool) {
-	mygo.RunOnMain(func() { ok = darwin.TestDockInspector(w.NativeHandle()) })
-	return ok
-}
+// The inspector cannot be shown from code with public WebKit API.
+func dockDevTools(*mygo.Window) bool { return false }
 
-func dockedDevToolsPlace(w *mygo.Window) (place string) {
-	mygo.RunOnMain(func() { place = darwin.TestInspectorPlace(w.NativeHandle()) })
-	return place
-}
+func dockedDevToolsPlace(*mygo.Window) string { return "" }
 
 // Context menus track the mouse in a modal loop; not automated.
 func dismissPopups() (int, bool) { return 0, false }
