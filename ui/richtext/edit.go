@@ -88,6 +88,9 @@ func (v *view) lockedEdit(fn func(e *Edit)) {
 			s := &d.undo[len(d.undo)-1]
 			fn(&Edit{d: d, step: s})
 			s.selAfter = [2]int{d.anchor, d.caret}
+			if s.restoreTyping {
+				s.typingAfter = d.typing
+			}
 			clear(d.redo)
 			d.redo = d.redo[:0]
 			break
@@ -373,6 +376,56 @@ func (v *view) blockShortcut(ps int, prefix string) {
 // inlineShortcut formats what a pair of marks typed around words holds:
 // **bold**, *italic*, _italic_, `code` and ~~strikethrough~~.
 func (v *view) inlineShortcut(ps int, before []rune) {
+	match, ok := findInlineShortcut(before)
+	if !ok {
+		return
+	}
+	v.edit(func(e *Edit) {
+		e.convertInline(ps, match)
+		e.Select(ps+match.closeAt-match.width, ps+match.closeAt-match.width)
+		e.setInlineTyping(ps, ps+match.open)
+	})
+}
+
+// ConvertInlineMarkdown converts a closing Markdown mark ending at end, a
+// rune offset, in this edit's undo step. It recognizes the editor's inline
+// shortcuts, preserves the selection's direction and existing attributes,
+// and leaves subsequent typing outside the converted format. It returns
+// whether a pair of marks was converted; code blocks are left unchanged.
+// In a handled OnTextInput callback, calling it also consumes the default
+// Markdown shortcut for that input, even when no pair matches. The caller
+// controls when to convert and must honor EditorOptions.NoMarkdown.
+func (e *Edit) ConvertInlineMarkdown(end int) bool {
+	e.markdownConsumed = true
+	t := e.Text()
+	end = max(0, min(end, t.Len()))
+	ps, _ := t.ParagraphRange(end)
+	if t.ParagraphStyleAt(end).CodeBlock || end == ps {
+		return false
+	}
+	before := []rune(t.Slice(ps, end).String())
+	switch before[len(before)-1] {
+	case '*', '_', '`', '~':
+		if match, ok := findInlineShortcut(before); ok {
+			e.convertInline(ps, match)
+			// Publish the mapped selection instead of letting views map it
+			// through the combined replacement of both delimiter runs.
+			a, c := e.Selection()
+			e.Select(a, c)
+			e.setInlineTyping(ps, ps+match.open)
+			e.step.restoreTyping = true
+			return true
+		}
+	}
+	return false
+}
+
+type inlineMatch struct {
+	open, closeAt, width int
+	mark                 string
+}
+
+func findInlineShortcut(before []rune) (inlineMatch, bool) {
 	n := len(before)
 	last := before[n-1]
 	mark := string(last)
@@ -380,12 +433,12 @@ func (v *view) inlineShortcut(ps int, before []rune) {
 		mark += mark
 	}
 	if last == '~' && len(mark) == 1 {
-		return
+		return inlineMatch{}, false
 	}
 	m := len([]rune(mark))
 	closeAt := n - m
 	if closeAt <= 0 || unicode.IsSpace(before[closeAt-1]) {
-		return
+		return inlineMatch{}, false
 	}
 	open := -1
 	for i := closeAt - 1; i >= 0; i-- {
@@ -403,10 +456,14 @@ func (v *view) inlineShortcut(ps int, before []rune) {
 		}
 	}
 	if open < 0 {
-		return
+		return inlineMatch{}, false
 	}
+	return inlineMatch{open: open, closeAt: closeAt, width: m, mark: mark}, true
+}
+
+func (e *Edit) convertInline(ps int, match inlineMatch) {
 	set := func(a *Attributes) {
-		switch mark {
+		switch match.mark {
 		case "**", "__":
 			a.Weight = 700
 		case "*", "_":
@@ -417,21 +474,20 @@ func (v *view) inlineShortcut(ps int, before []rune) {
 			a.Strikethrough = true
 		}
 	}
-	start, end := ps+open, ps+closeAt
-	v.edit(func(e *Edit) {
-		e.ReplaceString(end, end+m, "", Attributes{})
-		e.ReplaceString(start, start+m, "", Attributes{})
-		e.Format(start, end-m, set)
-		e.Select(end-m, end-m)
-	})
+	start, end := ps+match.open, ps+match.closeAt
+	m := match.width
+	e.ReplaceString(end, end+m, "", Attributes{})
+	e.ReplaceString(start, start+m, "", Attributes{})
+	e.Format(start, end-m, set)
+}
+
+func (e *Edit) setInlineTyping(ps, start int) {
 	// What is typed next is outside the format, as after a closing mark.
-	v.doc.lock()
 	plain := Attributes{}
 	if start > ps {
-		plain = v.doc.text.AttributesAt(start - 1).extending()
+		plain = e.d.text.AttributesAt(start - 1).extending()
 	}
-	v.doc.typing = &plain
-	v.doc.mu.Unlock()
+	e.SetTypingAttributes(plain)
 }
 
 // looksLikeURL reports whether s is a URL, as ⌘K links one to itself.

@@ -99,7 +99,7 @@ func TestTextInputHookSameFrameAndDecline(t *testing.T) {
 	tt.Type("a")
 	v := *state
 	mode, coalesce, docCoalesce, lastEdit, steps := v.mode, v.coalesce, d.coalesce, d.lastEdit, len(d.undo)
-	if v.textInputHook("b", false) || v.mode != mode || v.coalesce != coalesce || d.coalesce != docCoalesce || d.lastEdit != lastEdit || len(d.undo) != steps {
+	if handled, consumed := v.textInputHook("b", false); handled || consumed || v.mode != mode || v.coalesce != coalesce || d.coalesce != docCoalesce || d.lastEdit != lastEdit || len(d.undo) != steps {
 		t.Fatal("declined hook changed the typing coalescing state")
 	}
 }

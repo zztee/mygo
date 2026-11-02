@@ -37,10 +37,13 @@ func (v *view) input(ev ui.InputEvent) bool {
 		if v.compose != "" {
 			v.finishCompose(ev.Text)
 		} else {
-			if !v.textInputHook(ev.Text, false) {
+			handled, consumed := v.textInputHook(ev.Text, false)
+			if !handled {
 				v.insert(ev.Text)
 			}
-			v.typed(ev.Text)
+			if !consumed {
+				v.typed(ev.Text)
+			}
 		}
 		v.compose, v.composing = "", false
 		v.clearComposeCapture()

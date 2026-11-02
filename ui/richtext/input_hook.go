@@ -40,12 +40,12 @@ func (v *view) inputHook(composition bool, fn func(*Edit) bool) bool {
 // textInputHook restores the selection a composition hid before offering
 // its committed text. Restoring and replacing it share the composition's
 // undo step, including its original attributes and selection direction.
-func (v *view) textInputHook(s string, composition bool) bool {
+func (v *view) textInputHook(s string, composition bool) (handled, consumed bool) {
 	if v.opts.OnTextInput == nil || s == "" {
-		return false
+		return false, false
 	}
 	replaced, reversed := v.composeReplacement, v.composeReversed
-	return v.inputHook(composition, func(e *Edit) bool {
+	handled = v.inputHook(composition, func(e *Edit) bool {
 		typing := e.d.typing
 		restore := composition && replaced.Len() > 0
 		if restore {
@@ -60,6 +60,7 @@ func (v *view) textInputHook(s string, composition bool) bool {
 			e.d.typing = typing
 		}
 		if v.opts.OnTextInput(e, s) {
+			consumed = e.markdownConsumed
 			return true
 		}
 		if restore {
@@ -72,6 +73,7 @@ func (v *view) textInputHook(s string, composition bool) bool {
 		}
 		return restore
 	})
+	return handled, consumed
 }
 
 // finishCompose commits text from the input method, without calling the
@@ -79,7 +81,7 @@ func (v *view) textInputHook(s string, composition bool) bool {
 func (v *view) finishCompose(s string) {
 	v.compose = ""
 	v.joinStep()
-	if !v.textInputHook(s, true) {
+	if handled, _ := v.textInputHook(s, true); !handled {
 		v.replace(v.caret, v.caret, s)
 	}
 	v.clearComposeCapture()

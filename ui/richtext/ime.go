@@ -118,10 +118,13 @@ func (v *view) ReplaceText(r *ui.TextInputRange, s string) {
 		min(r.Start, r.End) == v.units(v.caret) && max(r.Start, r.End) == v.units(v.caret)+countUnits(v.compose)):
 		v.finishCompose(s)
 	case r == nil:
-		if !v.textInputHook(s, false) {
+		handled, consumed := v.textInputHook(s, false)
+		if !handled {
 			v.insert(s)
 		}
-		v.typed(s)
+		if !consumed {
+			v.typed(s)
+		}
 	default:
 		a, z := v.virtualRune(r.Start), v.virtualRune(r.End)
 		if a > z {

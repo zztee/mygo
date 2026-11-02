@@ -59,10 +59,14 @@ type change struct {
 
 // undoStep is a step of undo: the texts before and after it, which share
 // all they did not change, the selections, and the region it changed.
+// Atomic inline conversion also restores explicit typing attributes. Other
+// edits keep deriving them from the restored selection, as before.
 type undoStep struct {
-	before, after         Text
-	selBefore, selAfter   [2]int
-	start, oldEnd, newEnd int
+	typingBefore, typingAfter *Attributes
+	restoreTyping             bool
+	before, after             Text
+	selBefore, selAfter       [2]int
+	start, oldEnd, newEnd     int
 }
 
 // NewDocument returns a document of text, its caret at the end.
@@ -297,8 +301,9 @@ func composeChanges(a, b change) change {
 // Document.Edit. Offsets are into the text as the edit's changes
 // so far left it, and the selection follows them.
 type Edit struct {
-	d    *Document
-	step *undoStep
+	d                *Document
+	step             *undoStep
+	markdownConsumed bool
 }
 
 // Text returns the text as the edit's changes so far left it.
@@ -427,7 +432,7 @@ func (d *Document) edit(join bool, fn func(e *Edit)) {
 	if join && d.coalesce && now.Sub(d.lastEdit) < time.Second && len(d.undo) > 0 {
 		step = &d.undo[len(d.undo)-1]
 	} else {
-		d.undo = append(d.undo, undoStep{before: d.text, after: d.text, selBefore: [2]int{d.anchor, d.caret}, start: -1})
+		d.undo = append(d.undo, undoStep{before: d.text, after: d.text, selBefore: [2]int{d.anchor, d.caret}, start: -1, typingBefore: d.typing})
 		step = &d.undo[len(d.undo)-1]
 	}
 	fn(&Edit{d: d, step: step})
@@ -441,6 +446,9 @@ func (d *Document) edit(join bool, fn func(e *Edit)) {
 		d.undo = d.undo[1:]
 	}
 	step.selAfter = [2]int{d.anchor, d.caret}
+	if step.restoreTyping {
+		step.typingAfter = d.typing
+	}
 	clear(d.redo)
 	d.redo = d.redo[:0]
 	d.coalesce = join
@@ -496,10 +504,16 @@ func (d *Document) takeBack(redo bool) {
 		d.text = s.after
 		d.changed(s.start, s.oldEnd, s.newEnd)
 		d.setSelection(s.selAfter[0], s.selAfter[1])
+		if s.restoreTyping {
+			d.typing = s.typingAfter
+		}
 	} else {
 		d.text = s.before
 		d.changed(s.start, s.newEnd, s.oldEnd)
 		d.setSelection(s.selBefore[0], s.selBefore[1])
+		if s.restoreTyping {
+			d.typing = s.typingBefore
+		}
 	}
 	*to = append(*to, s)
 }
