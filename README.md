@@ -108,6 +108,19 @@ go tool mygo dev
 
 Read the [documentation](docs/README.md).
 
+### Page snapshots
+
+`Window.CapturePage()` captures the visible page as PNG.
+`mygo.CapturePageWithOptions(win, mygo.CapturePageOptions{Rect: mygo.Rectangle{Width: 640,
+Height: 4000}, Width: 1280})` captures that logical page region at 1280 output
+pixels wide on macOS, including content below the viewport, without resizing
+the window. The height follows the region's aspect ratio. A zero rectangle
+uses the viewport; a zero width uses the display's native scale. The caller
+should wait for page layout, images and fonts to finish before capturing.
+Linux and Windows ignore the options and capture the visible page as before;
+browser and unsupported backends still report unsupported. Native UI windows
+accept only zero options, with the same result as `CapturePage()`.
+
 ## License
 
 MIT

@@ -471,6 +471,8 @@ type Window struct {
 	TitleBarRoom platform.TitleBar
 	// AsyncFunction answers CallAsyncFunction.
 	AsyncFunction func(body string) (string, error)
+	// CapturePageHandler answers region snapshots on the main thread.
+	CapturePageHandler func(platform.CapturePageOptions, func([]byte, error))
 	// AsyncCallback, when set, receives CallAsyncFunction calls to answer
 	// through reply whenever it wants, on the main thread.
 	AsyncCallback func(body string, reply func(string, error))
