@@ -56,6 +56,19 @@ type EditorOptions struct {
 	// selection, which the next input sees, even before another frame.
 	// ReadOnly and Shift+Return do not call it.
 	OnReturn func() bool
+	// OnTextInput runs before committed typing is inserted. Returning true
+	// takes the input; false leaves the default insertion. Markdown shortcuts
+	// still run after ordinary typing, including input the hook handled.
+	// It runs with the document locked: use only the supplied Edit, and do
+	// not modify it when returning false. Its changes form one undo step.
+	// Marked text does not call it until committed; the selection that the
+	// composition replaced is restored for the callback. ReadOnly, paste
+	// and explicit replacements outside a composition do not call it.
+	OnTextInput func(e *Edit, text string) bool
+	// OnBackspace runs before an unmodified Backspace outside a composition.
+	// It follows OnTextInput's locking and return rules. Returning true
+	// takes the key and groups the callback's changes in one undo step.
+	OnBackspace func(e *Edit) bool
 	// TagStyle styles the runs that carry a Tag, as an app shows mentions
 	// or comments.
 	TagStyle func(tag string, s *ui.Span)
@@ -334,10 +347,15 @@ type view struct {
 	desiredX         float32
 	hasDesired       bool
 	// An input method's composition, shown at the caret.
-	compose         string
-	composeCaret    int
-	composeSelected ui.TextInputRange
-	composing       bool
+	compose             string
+	composeCaret        int
+	composeSelected     ui.TextInputRange
+	composing           bool
+	composeReplacement  Text
+	composeReversed     bool
+	composeTail         ParagraphStyle
+	composePending      bool
+	composePendingRange ui.TextInputRange
 	// mode is how the next edit joins the steps of undo, coalesce whether
 	// typing goes on.
 	mode     editMode
@@ -576,6 +594,7 @@ func (v *view) lockedSync() (change, bool) {
 		v.affinity = ui.TextDownstream
 		v.hasDesired = false
 		v.compose, v.composing = "", false
+		v.clearComposeCapture()
 		v.composeCaret, v.composeSelected = 0, ui.TextInputRange{}
 		v.reveal = true
 	}

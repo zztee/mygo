@@ -109,12 +109,18 @@ func (v *view) ReplaceText(r *ui.TextInputRange, s string) {
 		return
 	}
 	switch {
-	case r == nil && v.compose != "":
-		v.compose = ""
+	case v.composePending && r != nil && sameInputRange(*r, v.composePendingRange):
+		a, z := v.runeOfUnits(min(r.Start, r.End)), v.runeOfUnits(max(r.Start, r.End))
 		v.joinStep()
-		v.replace(v.caret, v.caret, s)
+		v.replace(a, z, "")
+		v.finishCompose(s)
+	case v.compose != "" && (r == nil ||
+		min(r.Start, r.End) == v.units(v.caret) && max(r.Start, r.End) == v.units(v.caret)+countUnits(v.compose)):
+		v.finishCompose(s)
 	case r == nil:
-		v.insert(s)
+		if !v.textInputHook(s, false) {
+			v.insert(s)
+		}
 		v.typed(s)
 	default:
 		a, z := v.virtualRune(r.Start), v.virtualRune(r.End)
@@ -131,6 +137,7 @@ func (v *view) ReplaceText(r *ui.TextInputRange, s string) {
 		v.replace(a, z, s)
 	}
 	v.compose, v.composing = "", false
+	v.clearComposeCapture()
 	v.composeCaret, v.composeSelected = 0, ui.TextInputRange{}
 	v.reveal = true
 	v.publish()
@@ -140,6 +147,11 @@ func (v *view) SetMarkedText(r *ui.TextInputRange, s string, selected ui.TextInp
 	v.sync()
 	if v.opts.ReadOnly {
 		return
+	}
+	if marked, ok := v.MarkedRange(); ok && r != nil && sameInputRange(*r, marked) {
+		// Replacing the whole marked range updates the same composition;
+		// it does not commit the provisional text or replace its origin.
+		r = nil
 	}
 	if v.compose == "" || r != nil {
 		a, z := v.selection()
@@ -157,8 +169,13 @@ func (v *view) SetMarkedText(r *ui.TextInputRange, s string, selected ui.TextInp
 			v.joinStep()
 		}
 		v.composing = true
+		v.clearComposeCapture()
 		if a != z {
+			original, reversed := v.shown.Slice(a, z), v.selAnchor > v.caret
+			tail := seqAt(v.shown.seq(), v.shown.paraAt(z)).style
 			v.replace(a, z, "")
+			v.composeReplacement, v.composeReversed = original, reversed
+			v.composeTail = tail
 		}
 	}
 	if selected.Start > selected.End {
@@ -175,11 +192,33 @@ func (v *view) SetMarkedText(r *ui.TextInputRange, s string, selected ui.TextInp
 }
 
 func (v *view) UnmarkText() {
+	v.sync()
+	if v.opts.ReadOnly {
+		return
+	}
+	if v.compose != "" {
+		v.finishCompose(v.compose)
+	}
+	v.commitCompose()
+	v.publish()
+}
+
+// EndPreedit ends provisional marking on GTK and IMM32. Its later explicit
+// replacement supplies the final text; only that text reaches the hook.
+func (v *view) EndPreedit() {
+	v.sync()
+	if v.opts.ReadOnly {
+		return
+	}
+	marked, ok := v.MarkedRange()
+	original, reversed, tail := v.composeReplacement, v.composeReversed, v.composeTail
 	transaction := v.composing
 	v.commitCompose()
-	// GTK and IMM32 can end the composition before committing their
-	// replacement, which shares its step of undo.
-	v.composing = transaction
+	if ok {
+		v.composeReplacement, v.composeReversed, v.composeTail = original, reversed, tail
+		v.composePending, v.composePendingRange = true, marked
+		v.composing = transaction
+	}
 	v.publish()
 }
 

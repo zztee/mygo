@@ -250,3 +250,30 @@ func TestTextLayoutVisualCaretUTF16(t *testing.T) {
 		t.Fatalf("hit-test lost visual edge: %+v %+v", up, got)
 	}
 }
+
+type preeditClient struct {
+	primitiveClient
+	ends int
+}
+
+func (c *preeditClient) EndPreedit() { c.ends++; c.mark = nil }
+
+func TestTextInputClientProvisionalEnd(t *testing.T) {
+	c := &preeditClient{primitiveClient: primitiveClient{text: "a", selection: TextInputSelection{Range: TextInputRange{Start: 1, End: 1}}}}
+	tt := coreNewTester(func(ctx *context) { coreBox(ctx).Size(250, 80).HandleTextInput(c).AutoFocus() }, 300, 100)
+	defer tt.rt.close()
+	tt.Compose("(", 1)
+	var composition platform.InputComposition
+	composition.End(tt.h.ime.Client)
+	if c.ends != 1 || c.unmarks != 0 || c.text != "a(" {
+		t.Fatalf("end preedit: %+v", c)
+	}
+	composition.Replace(tt.h.ime.Client, nil, "（")
+	if c.text != "a（" {
+		t.Fatalf("final replacement %q", c.text)
+	}
+	tt.h.ime.Client.UnmarkText()
+	if c.unmarks != 1 || c.ends != 1 {
+		t.Fatal("final unmark used provisional end")
+	}
+}

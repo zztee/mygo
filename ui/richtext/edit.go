@@ -183,6 +183,7 @@ func (v *view) commitCompose() {
 		v.replace(v.caret, v.caret, s)
 	}
 	v.composeCaret, v.composeSelected = 0, ui.TextInputRange{}
+	v.clearComposeCapture()
 	v.composing = false
 }
 

@@ -36,6 +36,9 @@ type Point struct{ X, Y float32 }
 // the new marked text. ReplaceText commits and clears preedit; UnmarkText
 // clears marked status, retaining the document's text. Selection is
 // queried again after every mutation, before the next native event.
+// Clients may also implement EndPreedit() to distinguish a provisional
+// preedit end from a final UnmarkText. The ended text remains replaceable
+// by the following ReplaceText, whose range covers that provisional text.
 type TextInputClient interface {
 	TextForRange(TextInputRange) (string, TextInputRange)
 	Selection() TextInputSelection
@@ -133,6 +136,19 @@ func (a *textInputAdapter) ReplaceText(r *platform.TextRange, s string) {
 func (a *textInputAdapter) SetMarkedText(r *platform.TextRange, s string, selected platform.TextRange) {
 	if c, _ := a.client(); c != nil {
 		c.SetMarkedText(r, s, selected)
+		a.changed()
+	}
+}
+
+// EndPreedit keeps the native end-preedit/commit distinction for clients
+// that transform committed input. Other clients keep their unmark behavior.
+func (a *textInputAdapter) EndPreedit() {
+	if c, _ := a.client(); c != nil {
+		if preedit, ok := c.(interface{ EndPreedit() }); ok {
+			preedit.EndPreedit()
+		} else {
+			c.UnmarkText()
+		}
 		a.changed()
 	}
 }

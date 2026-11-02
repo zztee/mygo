@@ -14,6 +14,10 @@ const scrollbarWidth = 10
 // the pointer and the wheel.
 func (v *view) input(ev ui.InputEvent) bool {
 	v.sync()
+	if v.composePending && (ev.Kind == ui.InputKeyDown || ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputCommand || ev.Kind == ui.InputSelect) {
+		v.clearComposeCapture()
+		v.composing = false
+	}
 	defer v.publish()
 	switch ev.Kind {
 	case ui.InputKeyDown:
@@ -27,9 +31,16 @@ func (v *view) input(ev ui.InputEvent) bool {
 		if v.opts.ReadOnly || ev.Text == "" {
 			return false
 		}
-		v.compose = ""
-		v.insert(ev.Text)
-		v.typed(ev.Text)
+		if v.compose != "" {
+			v.finishCompose(ev.Text)
+		} else {
+			if !v.textInputHook(ev.Text, false) {
+				v.insert(ev.Text)
+			}
+			v.typed(ev.Text)
+		}
+		v.compose, v.composing = "", false
+		v.clearComposeCapture()
 		v.blinkStart = ev.Time
 		return true
 	case ui.InputCommand:
@@ -379,6 +390,9 @@ func (v *view) key(key ui.Key, mods ui.Modifiers) bool {
 	ps := v.shown.paraStart(p)
 	switch key {
 	case ui.KeyBackspace:
+		if mods == 0 && v.compose == "" && v.opts.OnBackspace != nil && v.inputHook(false, v.opts.OnBackspace) {
+			return true
+		}
 		switch {
 		case a != z:
 			v.deleteRange(a, z, false)

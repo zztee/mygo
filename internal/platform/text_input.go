@@ -47,7 +47,11 @@ func (c *InputComposition) End(client TextInputClient) {
 	if r, ok := client.MarkedRange(); ok {
 		c.pending = &r
 	}
-	client.UnmarkText()
+	if c, ok := client.(interface{ EndPreedit() }); ok {
+		c.EndPreedit()
+	} else {
+		client.UnmarkText()
+	}
 }
 func (c *InputComposition) Replace(client TextInputClient, r *TextRange, text string) {
 	if r == nil && c.pending != nil {
