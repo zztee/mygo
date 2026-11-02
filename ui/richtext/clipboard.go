@@ -201,7 +201,13 @@ func (v *view) copySelection() {
 	if a == z {
 		return
 	}
-	v.services.WriteClipboardData(clipboardData(v.shown.Slice(a, z)))
+	var t Text
+	if v.opts.OnCopy != nil {
+		t = v.opts.OnCopy(v.shown, a, z)
+	} else {
+		t = v.shown.Slice(a, z)
+	}
+	v.services.WriteClipboardData(clipboardData(t))
 }
 
 // paste replaces the selection with what the clipboard holds: the richest

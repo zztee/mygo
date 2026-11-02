@@ -44,6 +44,15 @@ type EditorOptions struct {
 	// what to insert, as an app leaves out what its files cannot keep.
 	// Plain text and Paste and Match Style do not pass through it.
 	OnPaste func(Text) Text
+	// OnCopy, when set, receives the current displayed text and the nonempty
+	// selection's ordered rune offsets. It returns the selection to put on
+	// the clipboard as rich text, HTML and plain text. The text is immutable;
+	// use its value methods to change the copy's attributes or contents.
+	// It runs once per copy or cut on the UI thread and must not call
+	// Document methods: it only transforms a clipboard value. Its result does
+	// not change the document, selection or history; a cut still deletes the
+	// original range.
+	OnCopy func(text Text, start, end int) Text
 	// OnHistory runs after each undo or redo that changed the document,
 	// before the editor syncs and takes the next input. redo is true for
 	// redo. It runs without the document's lock held and may call its
