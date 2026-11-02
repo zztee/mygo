@@ -483,3 +483,90 @@ func TestTextInputHookUnmarkAfterExternalSelection(t *testing.T) {
 		t.Fatalf("stale composition restored text: %q calls %d", d.Text().String(), calls)
 	}
 }
+
+func TestEditSetTypingAttributes(t *testing.T) {
+	d := NewDocument(NewText("seed"))
+	d.SetSelection(4, 4)
+	before, version := d.Text().Markdown(), d.Version()
+	attrs := Attributes{Font: "serif", Size: 18, Weight: 700, Italic: true,
+		Underline: true, Strikethrough: true, Code: true, Link: "https://example.test",
+		LinkTitle: "title", Tag: "tag", Attachment: &Attachment{}, SoftBreak: true, SoftBreakBefore: true}
+	d.SetTypingAttributes(attrs)
+	want := d.TypingAttributes()
+	d.SetSelection(4, 4)
+	d.Edit(func(e *Edit) {
+		e.SetTypingAttributes(attrs)
+		if got := e.TypingAttributes(); got != want || got.Attachment != nil || got.SoftBreak || got.SoftBreakBefore {
+			t.Fatalf("typing attributes = %+v, want %+v", got, want)
+		}
+	})
+	if d.Text().Markdown() != before || d.Version() != version || d.CanUndo() {
+		t.Fatal("setting typing attributes changed the text, version or undo history")
+	}
+	if a, c := d.Selection(); a != 4 || c != 4 {
+		t.Fatalf("selection = %d, %d", a, c)
+	}
+	d.Edit(func(e *Edit) {
+		e.Select(0, 0)
+		if e.TypingAttributes() == want {
+			t.Fatal("moving the selection retained explicit typing attributes")
+		}
+	})
+}
+
+func TestBackspaceInputHookRestoresTypingAttributes(t *testing.T) {
+	for _, sameFrame := range []bool{false, true} {
+		name := "separate frames"
+		if sameFrame {
+			name = "same frame"
+		}
+		t.Run(name, func(t *testing.T) {
+			d := NewDocument(NewText("seed()"))
+			opts := EditorOptions{OnBackspace: func(e *Edit) bool {
+				attrs := e.TypingAttributes()
+				e.ReplaceString(4, 6, "", Attributes{})
+				e.Select(4, 4)
+				e.SetTypingAttributes(attrs)
+				return true
+			}}
+			tt, _, _ := inputHookTester(t, d, &opts)
+			d.SetSelection(5, 5)
+			tt.Frame()
+			d.SetTypingAttributes(Attributes{Weight: 700, Italic: true})
+			action := func() {
+				tt.Key(0, ui.KeyBackspace)
+				tt.Type("x")
+			}
+			if sameFrame {
+				tt.Batch(action)
+			} else {
+				action()
+			}
+			if got := d.Text().Markdown(); got != "seed***x***" {
+				t.Fatalf("typed markdown = %q", got)
+			}
+			if a, c := d.Selection(); a != 5 || c != 5 {
+				t.Fatalf("typed selection = %d, %d", a, c)
+			}
+			tt.Key(ui.Cmd, ui.KeyZ)
+			if got := d.Text().String(); got != "seed" {
+				t.Fatalf("undo typing = %q", got)
+			}
+			tt.Key(ui.Cmd, ui.KeyZ)
+			if got := d.Text().Markdown(); got != "seed()" {
+				t.Fatalf("undo deletion = %q", got)
+			}
+			if a, c := d.Selection(); a != 5 || c != 5 {
+				t.Fatalf("undo selection = %d, %d", a, c)
+			}
+			if d.CanUndo() {
+				t.Fatal("restoring typing attributes added an undo step")
+			}
+			tt.Key(ui.Cmd|ui.Shift, ui.KeyZ)
+			tt.Key(ui.Cmd|ui.Shift, ui.KeyZ)
+			if got := d.Text().Markdown(); got != "seed***x***" {
+				t.Fatalf("redo typing = %q", got)
+			}
+		})
+	}
+}

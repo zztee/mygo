@@ -89,6 +89,15 @@ func (v *view) finishCompose(s string) {
 // selection would receive, including attributes set by a formatting command.
 func (e *Edit) TypingAttributes() Attributes { return e.d.typingAttributes() }
 
+// SetTypingAttributes sets the attributes the next typed text gets, until
+// the selection moves or text is replaced. Like other Edit methods, it uses
+// the document lock already held by the edit callback. It changes neither
+// the text nor its undo history and does not retain attachment or soft breaks.
+func (e *Edit) SetTypingAttributes(a Attributes) {
+	a.Attachment, a.SoftBreak, a.SoftBreakBefore = nil, false, false
+	e.d.typing = &a
+}
+
 // clearComposeCapture releases the original selection when a composition
 // commits, is abandoned, or is superseded by an unrelated input action.
 func (v *view) clearComposeCapture() {
