@@ -881,7 +881,14 @@ func (e *dwrite) typeset(layout uintptr, style Style, spans []Span, text []rune)
 			method[func(this uintptr, size float32, r uintptr) uintptr](layout, layoutSetFontSize)(layout, sp.Size, r)
 		}
 		e.spacing(layout, sp.LetterSpacing, r)
-		e.typography(layout, sp.Features, r)
+		list := sp.Features
+		if sp.BaselineOffset != 0 {
+			// Drawing effects do not split existing clusters. Disable
+			// ligature substitutions in shifted spans during shaping,
+			// preserving the effective non-ligature OpenType features.
+			list = baselineFeatures(sp.style(style).Features)
+		}
+		e.typography(layout, list, r)
 	}
 	// The runes in other languages than the format's: those of spans, and
 	// Han characters in a language that does not write them, which keep

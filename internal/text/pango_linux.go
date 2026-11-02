@@ -162,6 +162,7 @@ var pangoLib struct {
 	attrListNew               func() uintptr
 	attrListUnref             func(list uintptr)
 	attrListInsert            func(list, attr uintptr)
+	attrRiseNew               func(rise int32) uintptr
 	attrLetterSpacingNew      func(spacing int32) uintptr
 	attrFontFeaturesNew       func(features string) uintptr // Pango 1.38
 	attrFamilyNew             func(family string) uintptr
@@ -286,6 +287,7 @@ func loadPango() error {
 	bind(pango, &l.attrListNew, "pango_attr_list_new")
 	bind(pango, &l.attrListUnref, "pango_attr_list_unref")
 	bind(pango, &l.attrListInsert, "pango_attr_list_insert")
+	bind(pango, &l.attrRiseNew, "pango_attr_rise_new")
 	bind(pango, &l.attrLetterSpacingNew, "pango_attr_letter_spacing_new")
 	bind(pango, &l.attrFamilyNew, "pango_attr_family_new")
 	bind(pango, &l.attrSizeAbsoluteNew, "pango_attr_size_new_absolute")
@@ -710,6 +712,11 @@ func (e *pangoEngine) attributes(style Style, spans []Span, text []rune) uintptr
 		}
 		if sp.Italic {
 			add(l.attrStyleNew(pangoStyleItalic), b0, b1)
+		}
+		if sp.BaselineOffset != 0 {
+			// Rise splits Pango items. The extracted glyph coordinates are
+			// relative to the item; common layout applies the offset.
+			add(l.attrRiseNew(int32(math.Round(float64(sp.BaselineOffset)*pangoScale))), b0, b1)
 		}
 		add(spacing(sp.LetterSpacing), b0, b1)
 		add(features(sp.Features), b0, b1)

@@ -50,30 +50,35 @@ func (s *System) Decorate(l *Layout, li, i, j int, x, y, scale float32, d Decora
 	if i >= j {
 		return nil
 	}
-	style := l.Params.Style
-	if l.Params.Spans != "" {
-		r := line.Glyphs[i].Cluster
-		for _, sp := range DecodeSpans(l.Params.Spans) {
-			if r < sp.End {
-				style = sp.style(style)
-				break
+	spans := DecodeSpans(l.Params.Spans)
+	var out []Stroke
+	for i < j {
+		end := i + 1
+		for end < j && line.Glyphs[end].BaselineOffset == line.Glyphs[i].BaselineOffset {
+			end++
+		}
+		style := l.Params.Style
+		if sp := spanAt(spans, line.Glyphs[i].Cluster); sp != nil {
+			style = sp.style(style)
+		}
+		if f := s.font(style); f != nil {
+			strokes := s.engine().decorate(decoRange{l: l, line: line, i: i, j: end, font: f, x: x, y: y - line.Glyphs[i].BaselineOffset, scale: scale, d: d})
+			if thick > 0 {
+				h := max(float32(math.Round(float64(thick*scale))), 1)
+				for k := range strokes {
+					st := &strokes[k]
+					st.Top = float32(math.Round(float64(st.Top+st.Bottom-h) / 2))
+					st.Bottom = st.Top + h
+				}
 			}
+			if out == nil && end == j {
+				return strokes
+			}
+			out = append(out, strokes...)
 		}
+		i = end
 	}
-	f := s.font(style)
-	if f == nil {
-		return nil
-	}
-	strokes := s.engine().decorate(decoRange{l: l, line: line, i: i, j: j, font: f, x: x, y: y, scale: scale, d: d})
-	if thick > 0 {
-		h := max(float32(math.Round(float64(thick*scale))), 1)
-		for k := range strokes {
-			st := &strokes[k]
-			st.Top = float32(math.Round(float64(st.Top+st.Bottom-h) / 2))
-			st.Bottom = st.Top + h
-		}
-	}
-	return strokes
+	return out
 }
 
 // runs calls fn for each run of glyphs of one font among [i, j).

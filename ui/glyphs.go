@@ -129,7 +129,7 @@ func (p *Painter) Glyphs(glyphs []Glyph, x, y float32, c Color) {
 		p.s.Glyphs = append(p.s.Glyphs, sg)
 	}
 	if run != nil {
-		run.flush(p, baseline)
+		run.flush(p)
 	}
 	if end := int32(len(p.s.Glyphs)); end > start {
 		p.add(scene.Op{Kind: scene.OpGlyphs, Start: start, End: end})
@@ -160,6 +160,10 @@ func (p *Painter) TextLine(l *text.Layout, x, y float32, color func(cluster int)
 		if !p.transform.Set && (pen > right || pen+(g.Advance+g.Size)*s < left) {
 			continue
 		}
+		glyphBaseline := baseline
+		if g.BaselineOffset != 0 {
+			glyphBaseline = sys.Baseline((y - g.BaselineOffset) * s)
+		}
 		c := color(g.Cluster)
 		shade := text.ShadeOf(c.R, c.G, c.B)
 		gi := sys.Glyph(g.Font, g.ID, s, pen, shade, p.opaque)
@@ -168,18 +172,18 @@ func (p *Painter) TextLine(l *text.Layout, x, y float32, color func(cluster int)
 		}
 		c = c.Alpha(p.opacity)
 		sg := scene.Glyph{
-			X: float32(math.Floor(float64(pen))) + gi.Left, Y: baseline + gi.Top, W: float32(gi.W), H: float32(gi.H),
+			X: float32(math.Floor(float64(pen))) + gi.Left, Y: glyphBaseline + gi.Top, W: float32(gi.W), H: float32(gi.H),
 			U: gi.X, V: gi.Y, UW: gi.W, VH: gi.H,
 			Color: c.scene(), Wide: p.glyphWide(c), Colored: gi.Colored, Subpixel: gi.Subpixel, Thin: gi.Thin,
 		}
 		if run != nil {
-			run.add(p, text.Glyph{Font: g.Font, ID: g.ID}, gi, pen, sg, shade, baseline)
+			run.add(p, text.Glyph{Font: g.Font, ID: g.ID}, gi, pen, sg, shade, glyphBaseline)
 			continue
 		}
 		p.s.Glyphs = append(p.s.Glyphs, sg)
 	}
 	if run != nil {
-		run.flush(p, baseline)
+		run.flush(p)
 	}
 	if end := int32(len(p.s.Glyphs)); end > start {
 		p.add(scene.Op{Kind: scene.OpGlyphs, Start: start, End: end})

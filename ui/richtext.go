@@ -13,15 +13,20 @@ import (
 // zero takes the style of the text around it, and Italic, Underline,
 // WavyUnderline and Strikethrough only turn those on.
 type Span struct {
-	Text          string
-	Font          string // a family, as for Element.Font
-	Size          float32
-	Weight        int
-	Italic        bool
-	Color         Color
-	Underline     bool
-	WavyUnderline bool
-	Strikethrough bool
+	Text string
+	Font string // a family, as for Element.Font
+	Size float32
+	// BaselineOffset raises the span above the line baseline in DIPs; a
+	// negative value lowers it. It preserves text and makes room for the
+	// shifted glyphs and inline objects. Offsets create shaping boundaries;
+	// Windows suppresses ligatures inside shifted spans to separate clusters.
+	BaselineOffset float32
+	Weight         int
+	Italic         bool
+	Color          Color
+	Underline      bool
+	WavyUnderline  bool
+	Strikethrough  bool
 	// DecorationColor and DecorationThickness are those of the span's
 	// underline and strikethrough, as for Element.DecorationColor.
 	DecorationColor     Color
@@ -172,7 +177,7 @@ func (sc *spanCache) update(spans []Span) {
 // spanStyle returns the style of a span ending at rune end, for its
 // layout.
 func spanStyle(s Span, end int) text.Span {
-	return text.Span{End: end, Family: s.Font, Size: s.Size, Weight: s.Weight, Italic: s.Italic, LetterSpacing: s.LetterSpacing, Features: s.Features, Lang: s.Lang,
+	return text.Span{End: end, Family: s.Font, Size: s.Size, Weight: s.Weight, Italic: s.Italic, LetterSpacing: s.LetterSpacing, Features: s.Features, Lang: s.Lang, BaselineOffset: s.BaselineOffset,
 		ObjectWidth: s.ObjectWidth, ObjectHeight: s.ObjectHeight, ObjectDescent: s.ObjectDescent}
 }
 
@@ -340,7 +345,7 @@ func (sp *spanPaint) backgrounds(p *Painter, line *text.Line, x, y float32) {
 		if r := sp.spans[k].Radius; r > 0 {
 			size := line.Glyphs[i].Size
 			px := min(size*0.22, r)
-			p.Fill(Rect{x + x0 - px, y + line.Baseline - size*0.98, x1 - x0 + 2*px, size * 1.32}, sp.spans[k].Background, r)
+			p.Fill(Rect{x + x0 - px, y + line.Baseline - sp.spans[k].BaselineOffset - size*0.98, x1 - x0 + 2*px, size * 1.32}, sp.spans[k].Background, r)
 			return
 		}
 		p.Fill(Rect{x + x0, y + line.Y, x1 - x0, line.Height}, sp.spans[k].Background, 0)

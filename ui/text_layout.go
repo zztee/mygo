@@ -177,7 +177,7 @@ func (t *TextLayout) Objects() []TextObject {
 					break
 				}
 			}
-			out = append(out, TextObject{Index: t.units[g.Cluster], Rect: Rect{X: g.X, Y: line.Baseline - (h - d), W: g.Advance, H: h}})
+			out = append(out, TextObject{Index: t.units[g.Cluster], Rect: Rect{X: g.X, Y: line.Baseline - g.BaselineOffset - (h - d), W: g.Advance, H: h}})
 		}
 	}
 	return out

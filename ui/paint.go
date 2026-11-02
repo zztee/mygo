@@ -701,6 +701,10 @@ func (p *Painter) textForeground(l *text.Layout, x, y float32, color Color, ts t
 			if g.Object || !p.transform.Set && !p.inlineTransforms() && (pen > (p.clip.X+p.clip.W)*s || pen+(g.Advance+g.Size)*s < p.clip.X*s) {
 				continue
 			}
+			glyphBaseline := baseline
+			if g.BaselineOffset != 0 {
+				glyphBaseline = sys.Baseline((y + line.Baseline - g.BaselineOffset) * s)
+			}
 			ix := float32(math.Floor(float64(pen)))
 			glyphColor, glyphShade := color, shade
 			if sp != nil {
@@ -714,19 +718,19 @@ func (p *Painter) textForeground(l *text.Layout, x, y float32, color Color, ts t
 			}
 			glyphColor = glyphColor.Alpha(p.opacity)
 			sg := scene.Glyph{
-				X: ix + gi.Left, Y: baseline + gi.Top, W: float32(gi.W), H: float32(gi.H),
+				X: ix + gi.Left, Y: glyphBaseline + gi.Top, W: float32(gi.W), H: float32(gi.H),
 				U: gi.X, V: gi.Y, UW: gi.W, VH: gi.H,
 				Transform: p.inlineTransform(g.Cluster).Pixels(s),
 				Color:     glyphColor.scene(), Wide: p.glyphWide(glyphColor), Colored: gi.Colored, Subpixel: gi.Subpixel, Thin: gi.Thin,
 			}
 			if run != nil {
-				run.add(p, g, gi, pen, sg, glyphShade, baseline)
+				run.add(p, g, gi, pen, sg, glyphShade, glyphBaseline)
 				continue
 			}
 			p.s.Glyphs = append(p.s.Glyphs, sg)
 		}
 		if run != nil {
-			run.flush(p, baseline)
+			run.flush(p)
 		}
 		if sp != nil {
 			sp.lines(p, l, li, x, y, color, deco)
@@ -744,12 +748,13 @@ func (p *Painter) textForeground(l *text.Layout, x, y float32, color Color, ts t
 // antialiased edges share pixels, which the text system joins where the
 // system's text stack draws them joined (System.JoinsGlyphs).
 type glyphRun struct {
-	font   *text.Font
-	shade  text.Shade
-	ids    []uint32
-	pens   []float32
-	glyphs []scene.Glyph
-	last   text.GlyphImage
+	font     *text.Font
+	shade    text.Shade
+	ids      []uint32
+	pens     []float32
+	glyphs   []scene.Glyph
+	last     text.GlyphImage
+	baseline float32
 }
 
 // add takes a glyph, its pen at pen and its scene glyph sg, into the run
@@ -757,18 +762,18 @@ type glyphRun struct {
 func (r *glyphRun) add(p *Painter, g text.Glyph, gi text.GlyphImage, pen float32, sg scene.Glyph, shade text.Shade, baseline float32) {
 	if n := len(r.glyphs); n > 0 {
 		prev := &r.glyphs[n-1]
-		if g.Font == r.font && sg.Color == prev.Color && sg.Wide == prev.Wide && !gi.Colored && p.rt.text.Shares(r.last, prev.X, prev.Y, gi, sg.X, sg.Y) {
+		if baseline == r.baseline && g.Font == r.font && sg.Color == prev.Color && sg.Wide == prev.Wide && !gi.Colored && p.rt.text.Shares(r.last, prev.X, prev.Y, gi, sg.X, sg.Y) {
 			r.ids, r.pens, r.glyphs, r.last = append(r.ids, g.ID), append(r.pens, pen), append(r.glyphs, sg), gi
 			return
 		}
-		r.flush(p, baseline)
+		r.flush(p)
 	}
-	r.font, r.shade, r.last = g.Font, shade, gi
+	r.font, r.shade, r.last, r.baseline = g.Font, shade, gi, baseline
 	r.ids, r.pens, r.glyphs = append(r.ids, g.ID), append(r.pens, pen), append(r.glyphs, sg)
 }
 
 // flush paints the run: one glyph as it is, more joined.
-func (r *glyphRun) flush(p *Painter, baseline float32) {
+func (r *glyphRun) flush(p *Painter) {
 	switch n := len(r.glyphs); {
 	case n == 1:
 		p.s.Glyphs = append(p.s.Glyphs, r.glyphs[0])
@@ -779,7 +784,7 @@ func (r *glyphRun) flush(p *Painter, baseline float32) {
 			break
 		}
 		sg := r.glyphs[0]
-		sg.X, sg.Y = float32(math.Floor(float64(r.pens[0])))+gi.Left, baseline+gi.Top
+		sg.X, sg.Y = float32(math.Floor(float64(r.pens[0])))+gi.Left, r.baseline+gi.Top
 		sg.W, sg.H, sg.U, sg.V, sg.UW, sg.VH = float32(gi.W), float32(gi.H), gi.X, gi.Y, gi.W, gi.H
 		sg.Subpixel, sg.Thin = gi.Subpixel, gi.Thin
 		p.s.Glyphs = append(p.s.Glyphs, sg)

@@ -768,6 +768,7 @@ func (e *coreText) styleSpans(attributed uintptr, style Style, spans []Span, tex
 	runDelegates.reset(objects)
 	objects = 0
 	from := 0
+	var baselineKey uintptr
 	for _, sp := range spans {
 		to := max(from, min(sp.End, len(text)))
 		r := cfRange{at[from], at[to] - at[from]}
@@ -786,6 +787,16 @@ func (e *coreText) styleSpans(attributed uintptr, style Style, spans []Span, tex
 				}
 				objects++
 			}
+		}
+		// A private attribute splits shaping runs at baseline boundaries
+		// without applying a second native vertical displacement.
+		if sp.BaselineOffset != 0 {
+			if baselineKey == 0 {
+				baselineKey = cfString("MyGoBaselineOffset")
+			}
+			value := cfFloat(float64(sp.BaselineOffset))
+			ct.attributedSet(styled, r, baselineKey, value)
+			ct.release(value)
 		}
 		s := sp.style(style)
 		if font := e.ctFont(s); font != 0 {
@@ -809,6 +820,9 @@ func (e *coreText) styleSpans(attributed uintptr, style Style, spans []Span, tex
 			ct.attributedSet(styled, r, ct.languageName, tag)
 			ct.release(tag)
 		}
+	}
+	if baselineKey != 0 {
+		ct.release(baselineKey)
 	}
 	return styled
 }

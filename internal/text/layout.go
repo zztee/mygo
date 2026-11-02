@@ -106,13 +106,15 @@ type Params struct {
 // before it. What it sets replaces the Style of the layout; Italic only
 // turns italics on.
 type Span struct {
-	End           int
-	Family        string
-	Size          float32
-	Weight        int
-	Italic        bool
-	LetterSpacing float32
-	Features      string
+	End    int
+	Family string
+	Size   float32
+	// BaselineOffset raises the glyphs and objects above the baseline.
+	BaselineOffset float32
+	Weight         int
+	Italic         bool
+	LetterSpacing  float32
+	Features       string
 	// Lang is the language of the runes, as Style.Lang; "" keeps the
 	// text's.
 	Lang string
@@ -178,6 +180,7 @@ func EncodeSpans(spans []Span) string {
 		b = binary.LittleEndian.AppendUint32(b, math.Float32bits(sp.ObjectHeight))
 		b = binary.LittleEndian.AppendUint32(b, math.Float32bits(sp.ObjectDescent))
 		str(sp.Lang)
+		b = binary.LittleEndian.AppendUint32(b, math.Float32bits(sp.BaselineOffset))
 	}
 	return string(b)
 }
@@ -230,6 +233,7 @@ func DecodeSpans(s string) []Span {
 		sp.ObjectHeight = f32()
 		sp.ObjectDescent = f32()
 		sp.Lang = str()
+		sp.BaselineOffset = f32()
 		if b == nil {
 			break
 		}
@@ -301,6 +305,9 @@ type Glyph struct {
 	// baseline. Advance moves the pen independently of those offsets.
 	X, Y    float32
 	Advance float32
+	// BaselineOffset is the span offset, separate from native shaping
+	// offsets in Y so painters can keep their native pixel snapping.
+	BaselineOffset float32
 	// Cluster is the first rune of the glyph's cluster, Runes how many
 	// runes the cluster holds; glyphs of the ellipsis have Runes 0.
 	Cluster, Runes int
@@ -1009,13 +1016,22 @@ func line(p Params, text []rune, sl shapedLine, offset int, rtl bool, m lineMetr
 					next = starts[i+1]
 				}
 				g.Runes = max(next-g.Cluster, 1)
-				if o := objectAt(spans, g.Cluster); o != nil {
+				sp := spanAt(spans, g.Cluster)
+				if sp != nil && sp.BaselineOffset != 0 {
+					g.BaselineOffset = sp.BaselineOffset
+					g.Y -= sp.BaselineOffset
+					if f := run.font; f != nil {
+						line.Ascent = max(line.Ascent, f.Ascent+sp.BaselineOffset)
+						line.Descent = max(line.Descent, f.Descent-sp.BaselineOffset)
+					}
+				}
+				if o := sp; o != nil && o.ObjectWidth > 0 {
 					// An inline object stands on the baseline, as high as
 					// it is, hanging its descent below, whatever font its
 					// run took.
 					g.Object, g.Advance, g.ID = true, o.ObjectWidth, 0
-					line.Ascent = max(line.Ascent, o.ObjectHeight-o.ObjectDescent)
-					line.Descent = max(line.Descent, o.ObjectDescent)
+					line.Ascent = max(line.Ascent, o.ObjectHeight-o.ObjectDescent+o.BaselineOffset)
+					line.Descent = max(line.Descent, o.ObjectDescent-o.BaselineOffset)
 				}
 				g.Cluster += offset
 			}
@@ -1047,13 +1063,21 @@ func line(p Params, text []rune, sl shapedLine, offset int, rtl bool, m lineMetr
 // objectAt returns the span of rune i if it makes it an inline object,
 // else nil.
 func objectAt(spans []Span, i int) *Span {
+	if sp := spanAt(spans, i); sp != nil && sp.ObjectWidth > 0 {
+		return sp
+	}
+	return nil
+}
+
+// spanAt returns the span containing rune i, or nil past the spans.
+func spanAt(spans []Span, i int) *Span {
 	k, _ := slices.BinarySearchFunc(spans, i, func(sp Span, i int) int {
 		if sp.End <= i {
 			return -1
 		}
 		return 1
 	})
-	if k < len(spans) && spans[k].ObjectWidth > 0 {
+	if k < len(spans) {
 		return &spans[k]
 	}
 	return nil
