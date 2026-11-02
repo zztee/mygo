@@ -66,6 +66,11 @@ func (v *view) replace(start, end int, s string) {
 	caret := start + utf8.RuneCountInString(s)
 	v.selAnchor, v.caret = caret, caret
 	d.anchor, d.caret = caret, caret
+	// Replace maps the old selection before the view collapses it. History
+	// restores the actual insertion caret, including after presentation maps it.
+	if n := len(d.undo); n > 0 {
+		d.undo[n-1].selAfter = [2]int{caret, caret}
+	}
 	if s == "" && start < end {
 		// Typing again where text was deleted gets its attributes, until
 		// the caret moves, as in NSTextView.

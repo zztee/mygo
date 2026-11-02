@@ -32,6 +32,12 @@ type Document struct {
 	undo, redo []undoStep
 	lastEdit   time.Time
 	coalesce   bool // typing may join the last step
+
+	presentation            func(Presentation) Presentation
+	presentationEpoch       uint64
+	presented               bool // history may contain text in another representation
+	presentationKey         string
+	presentationFromOptions bool
 	// log is what changed since the versions the editor last saw, for it
 	// to lay out only the paragraphs that changed.
 	log []change
@@ -103,6 +109,10 @@ func (d *Document) SetText(text Text) {
 	defer d.mu.Unlock()
 	old := d.text.Len()
 	d.text = text
+	d.presentation = nil
+	d.presentationEpoch++
+	d.presented = false
+	d.presentationKey, d.presentationFromOptions = "", false
 	d.undo, d.redo = nil, nil
 	d.coalesce = false
 	d.refreshes = nil // the editor lays the new text out whole
@@ -498,9 +508,33 @@ func (d *Document) takeBack(redo bool) {
 		return
 	}
 	s := (*from)[n-1]
+	var shown Presentation
+	if d.presented {
+		shown = Presentation{Text: s.before, Anchor: s.selBefore[0], Caret: s.selBefore[1]}
+		if redo {
+			shown.Text, shown.Anchor, shown.Caret = s.after, s.selAfter[0], s.selAfter[1]
+		}
+		if s.restoreTyping {
+			shown.Typing = s.typingBefore
+			if redo {
+				shown.Typing = s.typingAfter
+			}
+		}
+		// Run the callback before taking the step off its stack. A panic must
+		// not consume the user's history.
+		if d.presentation != nil {
+			shown = mapPresentation(d.presentation, shown)
+		}
+	}
 	(*from)[n-1] = undoStep{}
 	*from = (*from)[:n-1]
-	if redo {
+	if d.presented {
+		old := d.text.Len()
+		d.text = shown.Text
+		d.changed(0, old, shown.Text.Len())
+		d.setSelection(shown.Anchor, shown.Caret)
+		d.typing = shown.Typing
+	} else if redo {
 		d.text = s.after
 		d.changed(s.start, s.oldEnd, s.newEnd)
 		d.setSelection(s.selAfter[0], s.selAfter[1])
@@ -535,6 +569,7 @@ func (d *Document) Checkpoint() (rewind func(start, end, endThen int) bool) {
 	cp := checkpoint{
 		version: d.version, text: d.text, anchor: d.anchor, caret: d.caret,
 		undo: slices.Clone(d.undo), redo: slices.Clone(d.redo),
+		presentationEpoch: d.presentationEpoch,
 	}
 	return func(start, end, endThen int) bool {
 		d.lock()
@@ -545,17 +580,18 @@ func (d *Document) Checkpoint() (rewind func(start, end, endThen int) bool) {
 
 // checkpoint is a document as Checkpoint found it.
 type checkpoint struct {
-	version       uint64
-	text          Text
-	anchor, caret int
-	undo, redo    []undoStep
-	used          bool
+	version           uint64
+	text              Text
+	anchor, caret     int
+	undo, redo        []undoStep
+	used              bool
+	presentationEpoch uint64
 }
 
 // rewind brings the document back to cp, if what changed since lies
 // within start to end of the text, start to endThen of cp's.
 func (d *Document) rewind(cp *checkpoint, start, end, endThen int) bool {
-	if cp.used {
+	if cp.used || cp.presentationEpoch != d.presentationEpoch {
 		return false
 	}
 	c, ok := d.since(cp.version)

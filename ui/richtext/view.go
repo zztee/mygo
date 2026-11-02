@@ -29,6 +29,14 @@ type EditorOptions struct {
 	// NoMarkdown turns off the Markdown shortcuts: "# " at the start of a
 	// paragraph making a heading, **bold** making bold, and the others.
 	NoMarkdown bool
+	// Presentation maps the current document and restored history as
+	// Document.SetPresentation does. PresentationKey identifies the policy;
+	// change it when the desired representation changes. Switching waits for
+	// active input-method composition to finish, including a pending native
+	// replacement. This is the preferred way to switch a live editor's display.
+	// Editors sharing a document should use the same policy and key.
+	Presentation    func(Presentation) Presentation
+	PresentationKey string
 	// OnLink opens the URL of a link clicked, instead of the system,
 	// which opens only those ui.SafeToOpen allows.
 	OnLink func(url string)
@@ -329,8 +337,10 @@ func EditorBase(c *ui.Context, doc *Document, options ...EditorOptions) ui.Eleme
 // document, the layouts of its paragraphs, where it is scrolled to, the
 // selection and an input method's composition.
 type view struct {
-	doc  *Document
-	opts EditorOptions
+	doc             *Document
+	opts            EditorOptions
+	presentationKey string
+	presentationSet bool
 	// shown is the text laid out, of the document's version and
 	// selVersion.
 	shown      Text
@@ -495,12 +505,19 @@ func build(c *ui.Context, doc *Document, options []EditorOptions, styled bool) u
 	}
 	v.services = c.Services()
 	v.setLook(t, styled)
+	focused := e.Focused()
+	if v.composePending && !focused && (v.opts.Presentation != nil || v.presentationSet) {
+		// No marked text remains to commit on blur. Abandon the pending native
+		// replacement so it cannot indefinitely block a new display policy.
+		v.clearComposeCapture()
+		v.composing = false
+	}
+	v.applyPresentation()
 	v.sync()
 	if margin[0] != v.opts.Margin[0] || margin[2] != v.opts.Margin[2] {
 		v.respace(0)
 		v.respace(len(v.paras) - 1)
 	}
-	focused := e.Focused()
 	if focused != v.focused {
 		v.focused = focused
 		v.blinkStart = c.Now()
