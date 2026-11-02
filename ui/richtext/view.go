@@ -154,6 +154,15 @@ type EditorOptions struct {
 	// after an item was chosen, where the item's Chosen reports it, as
 	// the function given to ui.Element.ContextMenu does.
 	ContextMenu func(m *ui.Menu, attachment int)
+	// Underlines returns temporary marks for a visible paragraph, as a spell
+	// checker marks cached results. It runs during painting on the UI thread,
+	// with the immutable displayed text and its paragraph number. Keep it
+	// quick: read cached results or queue work, never check text synchronously
+	// or modify the document. Request another frame when results change.
+	// Ranges use rune offsets in this exact text and are clipped to the
+	// paragraph. Marks change neither text, history, clipboard nor layout.
+	// The paragraph with an active input-method composition is not called.
+	Underlines func(text Text, paragraph int) []Underline
 	// OnAttachmentScroll runs as the wheel or the trackpad scrolls over
 	// the box of an attachment, before the editor scrolls. i is the
 	// attachment's rune, x and y where in it, as OnAttachment has them,
